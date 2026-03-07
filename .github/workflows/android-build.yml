@@ -1,0 +1,161 @@
+name: Android APK Build
+
+on:
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js ─────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      # ── 3. Java (Android build requires JDK 17) ────────────────────────────
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: "gradle"
+
+      # ── 4. Android SDK ─────────────────────────────────────────────────────
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # ── 5. Install npm dependencies ────────────────────────────────────────
+      - name: Install dependencies
+        working-directory: apps/mobile
+        run: npm ci
+
+      # ── 6. Prepare adaptive icon asset (needed by expo prebuild) ──────────
+      - name: Prepare adaptive icon
+        working-directory: apps/mobile
+        run: |
+          if [ ! -f assets/adaptive-icon.png ]; then
+            cp assets/icon.png assets/adaptive-icon.png
+          fi
+
+      # ── 7. Expo Prebuild → generate native Android project ─────────────────
+      - name: Expo Prebuild (Android)
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --clean --no-install
+        env:
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL || 'http://localhost:8000' }}
+
+      # ── 8. Cache Gradle dependencies ───────────────────────────────────────
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            apps/mobile/android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # ── 9. Make gradlew executable ─────────────────────────────────────────
+      - name: Make gradlew executable
+        working-directory: apps/mobile/android
+        run: chmod +x gradlew
+
+      # ── 10. Build debug APK ────────────────────────────────────────────────
+      - name: Build debug APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx4g"
+
+      # ── 11. Rename APK with PR info ────────────────────────────────────────
+      - name: Rename APK
+        id: rename
+        run: |
+          APK_SOURCE="apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+          PR_NUM="${{ github.event.pull_request.number || 'manual' }}"
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          APK_NAME="huigu-ai-pr${PR_NUM}-${SHORT_SHA}-debug.apk"
+          mkdir -p dist
+          cp "$APK_SOURCE" "dist/$APK_NAME"
+          echo "apk_path=dist/$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      # ── 12. Upload APK as artifact ─────────────────────────────────────────
+      - name: Upload APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.rename.outputs.apk_name }}
+          path: ${{ steps.rename.outputs.apk_path }}
+          retention-days: 30
+          if-no-files-found: error
+
+      # ── 13. Comment on PR with download link ───────────────────────────────
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const sha = context.sha.substring(0, 7);
+            const artifactName = '${{ steps.rename.outputs.apk_name }}';
+            const runId = context.runId;
+            const repoUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`;
+            const artifactUrl = `${repoUrl}/actions/runs/${runId}`;
+
+            // Find and delete previous bot comments
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            for (const comment of comments.data) {
+              if (comment.user.type === 'Bot' && comment.body.includes('🤖 慧股AI Android APK')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+              }
+            }
+
+            // Post new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: [
+                '## 🤖 慧股AI Android APK',
+                '',
+                '✅ **构建成功！** Android 调试包已就绪。',
+                '',
+                `| 字段 | 值 |`,
+                `|------|-----|`,
+                `| 📦 APK 文件 | \`${artifactName}\` |`,
+                `| 🔖 Commit | \`${sha}\` |`,
+                `| 📥 下载地址 | [点击前往 Actions 页面下载](${artifactUrl}) |`,
+                '',
+                '> **安装说明：** 下载 APK 后，在 Android 手机上开启"未知来源安装"，然后安装即可。',
+                '> 这是调试版本（Debug APK），仅用于测试，不含代码混淆。',
+                '',
+                '---',
+                '*由 GitHub Actions 自动构建 · 保留 30 天*',
+              ].join('\n'),
+            });
