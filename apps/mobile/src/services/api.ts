@@ -157,6 +157,28 @@ export const sentimentApi = {
   influencers: (symbol: string, name: string) => apiClient.get<Influencer[]>(`/api/sentiment/${symbol}/influencers`, { params: { name } }).then(r => r.data),
 };
 
+export interface AlertTarget {
+  symbol: string;
+  name: string;
+  upper_target?: number;
+  lower_target?: number;
+}
+
+export interface AlertResult {
+  symbol: string;
+  name: string;
+  current_price: number;
+  upper_triggered: boolean;
+  lower_triggered: boolean;
+  upper_target?: number;
+  lower_target?: number;
+}
+
+export const alertApi = {
+  check: (targets: AlertTarget[]) =>
+    apiClient.post<AlertResult[]>('/api/market/alerts/check', targets).then(r => r.data),
+};
+
 export const aiApi = {
   debate: (symbol: string, name: string, context?: { quote_context?: string; sentiment_context?: string }) =>
     apiClient.post<BullBearDebate>(`/api/ai/debate/${symbol}`, context || {}, { params: { name } }).then(r => r.data),

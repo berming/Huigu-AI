@@ -1,10 +1,29 @@
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from app.services.market.akshare_client import (
     get_stock_quote, get_batch_quotes, get_market_overview,
     get_kline, search_stocks
 )
 
 router = APIRouter(prefix="/api/market", tags=["market"])
+
+
+# ── Alert types ───────────────────────────────────────────────────────────────
+
+class AlertTarget(BaseModel):
+    symbol: str
+    name: str
+    upper_target: float | None = None
+    lower_target: float | None = None
+
+class AlertResult(BaseModel):
+    symbol: str
+    name: str
+    current_price: float
+    upper_triggered: bool = False
+    lower_triggered: bool = False
+    upper_target: float | None = None
+    lower_target: float | None = None
 
 
 @router.get("/overview")
@@ -37,3 +56,31 @@ async def search(q: str = Query(..., min_length=1)):
 @router.post("/watchlist/quotes")
 async def watchlist_quotes(symbols: list[str]):
     return await get_batch_quotes(symbols)
+
+
+@router.post("/alerts/check", response_model=list[AlertResult])
+async def check_alerts(targets: list[AlertTarget]):
+    """
+    Server-side alert check. Client POSTs its configured alerts;
+    server fetches current prices and returns which ones are triggered.
+    Useful for background refresh or push notification scheduling.
+    """
+    symbols = [t.symbol for t in targets]
+    quotes = await get_batch_quotes(symbols)
+    price_map = {q.symbol: q.price for q in quotes}
+
+    results: list[AlertResult] = []
+    for t in targets:
+        price = price_map.get(t.symbol)
+        if price is None:
+            continue
+        results.append(AlertResult(
+            symbol=t.symbol,
+            name=t.name,
+            current_price=price,
+            upper_target=t.upper_target,
+            lower_target=t.lower_target,
+            upper_triggered=bool(t.upper_target and price >= t.upper_target),
+            lower_triggered=bool(t.lower_target and price <= t.lower_target),
+        ))
+    return results
