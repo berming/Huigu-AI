@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar,
 } from 'react-native';
@@ -58,8 +58,9 @@ export function StockDetailScreen({ route, navigation }: Props) {
     queryKey: ['quote', symbol],
     queryFn: () => marketApi.quote(symbol),
     refetchInterval: 10000,
-    onSuccess: (q) => setQuote(symbol, q),
   });
+
+  useEffect(() => { if (freshQuote) setQuote(symbol, freshQuote); }, [freshQuote]);
 
   const quote = cachedQuotes[symbol] ?? freshQuote;
 

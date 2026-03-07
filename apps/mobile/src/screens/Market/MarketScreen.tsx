@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
   TouchableOpacity, RefreshControl, StatusBar, Alert,
@@ -29,7 +29,6 @@ export function MarketScreen({ navigation }: Props) {
     queryKey: ['market', 'overview'],
     queryFn: marketApi.overview,
     refetchInterval: 30000,
-    onSuccess: setOverview,
   });
 
   const { data: quoteList, isLoading, refetch: refetchQuotes } = useQuery({
@@ -37,8 +36,10 @@ export function MarketScreen({ navigation }: Props) {
     queryFn: () => marketApi.watchlistQuotes(symList),
     refetchInterval: 10000,
     enabled: symList.length > 0 && hydrated,
-    onSuccess: setQuotes,
   });
+
+  useEffect(() => { if (overview) setOverview(overview); }, [overview]);
+  useEffect(() => { if (quoteList) setQuotes(quoteList); }, [quoteList]);
 
   const handleRefresh = useCallback(() => {
     refetchOverview();
