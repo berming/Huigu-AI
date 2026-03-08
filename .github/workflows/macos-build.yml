@@ -10,11 +10,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Single job on macos-15 (M4 Pro, arm64).
-  # electron-builder cross-compiles x64 and universal from arm64 via Rosetta.
   build-macos:
-    name: Build macOS DMG (arm64 · x64 · Universal)
-    runs-on: macos-15
+    name: Build macOS DMG (arm64)
+    runs-on: macos-15          # Apple Silicon (M4 Pro) runner
     permissions:
       contents: read
       pull-requests: write
@@ -32,7 +30,6 @@ jobs:
             apps/web/package-lock.json
             apps/macos/package-lock.json
 
-      # Cache Next.js build to skip rebuild when web source is unchanged
       - name: Restore Next.js build cache
         uses: actions/cache@v4
         id: web-cache
@@ -56,7 +53,6 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:8000' }}
 
-      # Ensure public/ exists so extraResources copy doesn't fail
       - name: Ensure web/public exists
         run: mkdir -p apps/web/public
 
@@ -64,26 +60,9 @@ jobs:
         working-directory: apps/macos
         run: npm ci
 
-      # arm64: native on M4 runner → best for M1/M2/M3/M4 Max
       - name: Build DMG (arm64)
         working-directory: apps/macos
         run: npx electron-builder --mac dmg --arm64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      # x64: cross-compiled via Rosetta on arm64 runner
-      - name: Build DMG (x64)
-        working-directory: apps/macos
-        run: npx electron-builder --mac dmg --x64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      # universal: fat binary (lipo arm64 + x64) — recommended for distribution
-      - name: Build DMG (universal)
-        working-directory: apps/macos
-        run: npx electron-builder --mac dmg --universal
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -92,29 +71,13 @@ jobs:
         id: sha
         run: echo "short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload arm64 DMG
+      - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
           name: huigu-ai-macos-arm64-${{ steps.sha.outputs.short }}
-          path: apps/macos/dist/*arm64*.dmg
+          path: apps/macos/dist/*.dmg
           retention-days: 14
-          if-no-files-found: warn
-
-      - name: Upload x64 DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: huigu-ai-macos-x64-${{ steps.sha.outputs.short }}
-          path: apps/macos/dist/*x64*.dmg
-          retention-days: 14
-          if-no-files-found: warn
-
-      - name: Upload Universal DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: huigu-ai-macos-universal-${{ steps.sha.outputs.short }}
-          path: apps/macos/dist/*universal*.dmg
-          retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
@@ -137,25 +100,19 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber,
               body: [
-                '## 🖥️ 慧股AI macOS',
+                '## 🖥️ 慧股AI macOS (Apple Silicon)',
                 '',
-                '✅ **macOS 客户端构建成功！** 三种架构均已就绪。',
-                '',
-                '| 架构 | 适用机型 | 说明 |',
-                '|------|---------|------|',
-                '| **arm64** | M1 / M2 / M3 / **M4 Max** ✅ | macos-15 原生编译 |',
-                '| **x64** | Intel Mac | Rosetta 交叉编译 |',
-                '| **Universal** | 全兼容（推荐发布用） | fat binary，lipo 合并 |',
+                '✅ **macOS 客户端构建成功！**',
                 '',
                 `| 字段 | 值 |`,
                 `|------|-----|`,
+                `| 🏗️ 架构 | arm64 (M4 Max 原生) |`,
                 `| 🔖 Commit | \`${sha}\` |`,
-                `| 📥 下载 | [点击前往 Actions 页面下载 DMG](${runUrl}) |`,
+                `| 📥 下载 | [前往 Actions 下载 DMG](${runUrl}) |`,
                 '',
-                '> **安装说明：** 下载 DMG 后，将 慧股AI.app 拖入「应用程序」文件夹。',
-                '> 首次运行：右键 → 打开（CI 构建未签名，跳过 Gatekeeper）。',
+                '> 下载 DMG → 拖入「应用程序」→ 右键打开（CI 构建未签名）',
                 '',
                 '---',
-                '*由 GitHub Actions 自动构建 · 保留 14 天*',
+                '*GitHub Actions · macos-15 runner · 保留 14 天*',
               ].join('\n'),
             });

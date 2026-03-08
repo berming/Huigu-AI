@@ -48,15 +48,11 @@
       }
     ],
     "mac": {
-      "target": [
-        { "target": "dmg", "arch": ["arm64"] },
-        { "target": "dmg", "arch": ["x64"] },
-        { "target": "dmg", "arch": ["universal"] }
-      ],
+      "target": [{ "target": "dmg", "arch": ["arm64"] }],
       "category": "public.app-category.finance",
       "icon": "build/icon.icns",
       "darkModeSupport": true,
-      "minimumSystemVersion": "13.0"
+      "minimumSystemVersion": "14.0"
     },
     "dmg": {
       "title": "慧股AI ${version}",
