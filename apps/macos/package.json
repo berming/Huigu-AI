@@ -2,6 +2,7 @@
   "name": "huigu-ai-macos",
   "version": "1.0.0",
   "description": "慧股AI — 智能投研平台 macOS客户端",
+  "author": "慧股AI",
   "private": true,
   "main": "main.js",
   "scripts": {
@@ -19,6 +20,7 @@
     "appId": "com.huiguai.app",
     "productName": "慧股AI",
     "copyright": "Copyright © 2025 慧股AI",
+    "publish": null,
     "directories": {
       "buildResources": "build",
       "output": "dist"
