@@ -25,6 +25,7 @@ function startWebServer() {
     webServer = spawn(process.execPath, [serverScript], {
       env: {
         ...process.env,
+        ELECTRON_RUN_AS_NODE: '1', // run Electron binary as plain Node.js
         PORT: String(WEB_PORT),
         NODE_ENV: 'production',
         HOSTNAME: '127.0.0.1',
