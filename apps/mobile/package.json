@@ -15,7 +15,7 @@
     "expo-haptics": "~14.1.0",
     "expo-linear-gradient": "~14.1.0",
     "react": "19.2.0",
-    "react-native": "0.82.2",
+    "react-native": "0.83.2",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-gesture-handler": "~2.24.0",
