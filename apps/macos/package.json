@@ -1,0 +1,62 @@
+{
+  "name": "huigu-ai-macos",
+  "version": "1.0.0",
+  "description": "慧股AI — 智能投研平台 macOS客户端",
+  "author": "慧股AI",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac",
+    "build:dir": "electron-builder --mac --dir",
+    "pack": "electron-builder --dir"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.huiguai.app",
+    "productName": "慧股AI",
+    "copyright": "Copyright © 2025 慧股AI",
+    "publish": null,
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "build/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/.next/standalone",
+        "to": "web",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../web/.next/static",
+        "to": "web/.next/static",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../web/public",
+        "to": "web/public",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "category": "public.app-category.finance",
+      "icon": "build/icon.icns",
+      "darkModeSupport": true,
+      "minimumSystemVersion": "14.0"
+    },
+    "dmg": {
+      "title": "慧股AI ${version}",
+      "window": { "width": 540, "height": 380 }
+    }
+  }
+}
