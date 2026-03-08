@@ -1,0 +1,109 @@
+name: macOS Build
+
+on:
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "apps/web/**"
+      - "apps/macos/**"
+      - ".github/workflows/macos-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js ──────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # ── 3. Build Next.js web app (standalone) ───────────────────────────────
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Build Next.js (standalone)
+        working-directory: apps/web
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:8000' }}
+
+      # ── 4. Build Electron macOS app ─────────────────────────────────────────
+      - name: Install macOS app dependencies
+        working-directory: apps/macos
+        run: npm ci
+
+      - name: Build macOS DMG
+        working-directory: apps/macos
+        run: npm run build:dir
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false   # skip code-signing in CI
+
+      # ── 5. Find and rename DMG ──────────────────────────────────────────────
+      - name: Locate build output
+        id: locate
+        run: |
+          BUILD=$(find apps/macos/dist -name "*.app" -maxdepth 3 | head -1)
+          echo "build_path=$BUILD" >> "$GITHUB_OUTPUT"
+          SHA="${{ github.sha }}"
+          echo "short_sha=${SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      # ── 6. Upload artifact ──────────────────────────────────────────────────
+      - name: Upload macOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: huigu-ai-macos-${{ steps.locate.outputs.short_sha }}
+          path: apps/macos/dist/mac*/
+          retention-days: 14
+          if-no-files-found: warn
+
+      # ── 7. Comment on PR ────────────────────────────────────────────────────
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const sha = context.sha.substring(0, 7);
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber,
+            });
+            for (const c of comments.data) {
+              if (c.user.type === 'Bot' && c.body.includes('🖥️ 慧股AI macOS')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner, repo: context.repo.repo, comment_id: c.id,
+                });
+              }
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: prNumber,
+              body: [
+                '## 🖥️ 慧股AI macOS',
+                '',
+                '✅ **macOS 客户端构建成功！**',
+                '',
+                `| 字段 | 值 |`,
+                `|------|-----|`,
+                `| 🔖 Commit | \`${sha}\` |`,
+                `| 📥 下载 | [点击前往 Actions 页面下载 .app](${runUrl}) |`,
+                '',
+                '> **安装说明：** 下载后解压，将 慧股AI.app 拖入「应用程序」文件夹。',
+                '> 首次运行需在「安全性与隐私」中允许运行（CI 构建未签名）。',
+                '',
+                '---',
+                '*由 GitHub Actions 自动构建 · 保留 14 天*',
+              ].join('\n'),
+            });
