@@ -3,11 +3,20 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 
+// ── Single instance lock ───────────────────────────────────────────────────────
+// Prevents multiple Electron processes (and thus multiple windows) from launching.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+  process.exit(0);
+}
+
 const isDev = !app.isPackaged;
 const WEB_PORT = 3000;
 
-let mainWindow;
-let webServer;
+let mainWindow = null;
+let webServer = null;
+let isCreatingWindow = false; // guard against concurrent createWindow calls
 
 // ── Start the bundled Next.js server (production) ─────────────────────────────
 function startWebServer() {
@@ -16,27 +25,40 @@ function startWebServer() {
     webServer = spawn(process.execPath, [serverScript], {
       env: {
         ...process.env,
-        PORT: WEB_PORT,
+        PORT: String(WEB_PORT),
         NODE_ENV: 'production',
         HOSTNAME: '127.0.0.1',
       },
       stdio: 'pipe',
     });
 
-    webServer.stdout.on('data', d => {
-      if (d.toString().includes('Ready')) resolve();
-    });
-    webServer.stderr.on('data', d => console.error('[web]', d.toString()));
-    webServer.on('error', reject);
+    let resolved = false;
+    const done = (err) => {
+      if (resolved) return;
+      resolved = true;
+      clearInterval(poll);
+      if (err) reject(err); else resolve();
+    };
 
-    // Fallback: wait up to 8s for server to come up
+    webServer.stdout.on('data', d => {
+      const text = d.toString();
+      console.log('[web]', text.trim());
+      if (text.includes('Ready') || text.includes('ready')) done();
+    });
+    webServer.stderr.on('data', d => console.error('[web]', d.toString().trim()));
+    webServer.on('error', err => done(err));
+    webServer.on('exit', (code) => {
+      if (!resolved) done(new Error(`server exited with code ${code}`));
+    });
+
+    // Fallback: poll HTTP until server responds
     let attempts = 0;
     const poll = setInterval(() => {
-      http.get(`http://127.0.0.1:${WEB_PORT}`, () => {
-        clearInterval(poll);
-        resolve();
+      http.get(`http://127.0.0.1:${WEB_PORT}`, (res) => {
+        res.resume(); // drain
+        done();
       }).on('error', () => {
-        if (++attempts > 40) { clearInterval(poll); reject(new Error('Server start timeout')); }
+        if (++attempts > 50) done(new Error('Server start timeout'));
       });
     }, 200);
   });
@@ -87,46 +109,80 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// ── Error page ────────────────────────────────────────────────────────────────
+function errorPage(msg) {
+  return `data:text/html;charset=utf-8,<html style="background:%230D1117;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:%23e6edf3;gap:16px">
+<div style="font-size:48px">⚠️</div>
+<div style="font-size:20px;font-weight:700">启动失败</div>
+<div style="font-size:14px;color:%238b949e;max-width:480px;text-align:center">${encodeURIComponent(msg)}</div>
+<button onclick="location.reload()" style="margin-top:12px;padding:8px 24px;background:%23F0B429;border:none;border-radius:6px;font-size:14px;cursor:pointer">重试</button>
+</html>`;
+}
+
 // ── Create main window ────────────────────────────────────────────────────────
 async function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    titleBarStyle: 'hiddenInset',
-    backgroundColor: '#0D1117',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
+  if (isCreatingWindow || mainWindow) return;
+  isCreatingWindow = true;
 
-  buildMenu();
+  try {
+    mainWindow = new BrowserWindow({
+      width: 1280,
+      height: 800,
+      minWidth: 900,
+      minHeight: 600,
+      titleBarStyle: 'hiddenInset',
+      backgroundColor: '#0D1117',
+      show: false, // show after ready-to-show to avoid flash
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
 
-  const url = isDev
-    ? `http://localhost:${WEB_PORT}`
-    : `http://127.0.0.1:${WEB_PORT}`;
+    // Prevent renderer from opening any new windows (stops infinite-window bug)
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  // Show loading screen while server boots
-  mainWindow.loadURL(`data:text/html,<html style="background:#0D1117;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#F0B429;font-size:24px;font-weight:800">慧股AI 启动中…</html>`);
+    // Show window once first paint is ready (no white/black flash)
+    mainWindow.once('ready-to-show', () => mainWindow?.show());
 
-  if (!isDev) {
-    try {
-      await startWebServer();
-    } catch (e) {
-      console.error('Failed to start web server:', e);
+    buildMenu();
+
+    // Show loading screen immediately
+    mainWindow.loadURL(
+      `data:text/html;charset=utf-8,<html style="background:%230D1117;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:%23F0B429;font-size:24px;font-weight:800">慧股AI 启动中…</html>`
+    );
+
+    if (!isDev) {
+      try {
+        await startWebServer();
+      } catch (e) {
+        console.error('Failed to start web server:', e);
+        mainWindow?.loadURL(errorPage(String(e)));
+        return;
+      }
     }
+
+    mainWindow.loadURL(
+      isDev ? `http://localhost:${WEB_PORT}` : `http://127.0.0.1:${WEB_PORT}`
+    );
+
+    mainWindow.on('closed', () => { mainWindow = null; });
+  } finally {
+    isCreatingWindow = false;
   }
-
-  mainWindow.loadURL(url);
-
-  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(createWindow);
+
+// When a second instance tries to launch, focus the existing window instead
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 
 app.on('window-all-closed', () => {
   webServer?.kill();
@@ -134,7 +190,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  if (!mainWindow) createWindow();
+  if (!mainWindow && !isCreatingWindow) createWindow();
 });
 
 app.on('before-quit', () => {
