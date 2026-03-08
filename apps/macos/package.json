@@ -42,8 +42,7 @@
       {
         "from": "../web/public",
         "to": "web/public",
-        "filter": ["**/*"],
-        "isOptional": true
+        "filter": ["**/*"]
       }
     ],
     "mac": {
