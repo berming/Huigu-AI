@@ -67,6 +67,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      # Ad-hoc sign the .app so macOS doesn't flag it as "damaged".
+      # This replaces the need for an Apple Developer certificate in CI.
+      - name: Ad-hoc codesign
+        run: |
+          APP=$(find apps/macos/dist -name "*.app" -maxdepth 2 | head -1)
+          if [ -n "$APP" ]; then
+            codesign --force --deep --sign - "$APP"
+            echo "Signed: $APP"
+          fi
+
       - name: Get short SHA
         id: sha
         run: echo "short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
@@ -110,7 +120,8 @@ jobs:
                 `| 🔖 Commit | \`${sha}\` |`,
                 `| 📥 下载 | [前往 Actions 下载 DMG](${runUrl}) |`,
                 '',
-                '> 下载 DMG → 拖入「应用程序」→ 右键打开（CI 构建未签名）',
+                '> 下载 DMG → 拖入「应用程序」→ 双击打开（已 ad-hoc 签名）',
+                '> 若仍提示无法打开，终端运行 `xattr -cr /Applications/慧股AI.app`',
                 '',
                 '---',
                 '*GitHub Actions · macos-15 runner · 保留 14 天*',
