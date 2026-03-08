@@ -42,7 +42,8 @@
       {
         "from": "../web/public",
         "to": "web/public",
-        "filter": ["**/*"]
+        "filter": ["**/*"],
+        "isOptional": true
       }
     ],
     "mac": {
@@ -58,7 +59,6 @@
     },
     "dmg": {
       "title": "慧股AI ${version}",
-      "backgroundColor": "#0D1117",
       "window": { "width": 540, "height": 380 }
     }
   }
