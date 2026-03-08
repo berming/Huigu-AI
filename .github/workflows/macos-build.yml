@@ -10,68 +10,162 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-macos:
-    name: Build macOS DMG
-    runs-on: macos-latest
+  # ── Job 1: arm64 native on M4 runner (supports M1/M2/M3/M4 Max) ─────────
+  build-arm64:
+    name: Build macOS DMG (arm64 · M4 runner)
+    runs-on: macos-15          # GitHub Actions M4 Pro runner — native arm64
     permissions:
       contents: read
       pull-requests: write
 
     steps:
-      # ── 1. Checkout ─────────────────────────────────────────────────────────
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Node.js ──────────────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            apps/macos/package-lock.json
 
-      # ── 3. Build Next.js web app (standalone) ───────────────────────────────
+      # Cache Next.js build output to avoid rebuilding unchanged web app
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        id: web-cache
+        with:
+          path: |
+            apps/web/.next/cache
+            apps/web/.next/standalone
+            apps/web/.next/static
+            apps/web/public
+          key: nextjs-arm64-${{ hashFiles('apps/web/package-lock.json', 'apps/web/src/**') }}
+          restore-keys: nextjs-arm64-
+
       - name: Install web dependencies
         working-directory: apps/web
         run: npm ci
 
       - name: Build Next.js (standalone)
+        if: steps.web-cache.outputs.cache-hit != 'true'
         working-directory: apps/web
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:8000' }}
 
-      # ── 4. Build Electron macOS app ─────────────────────────────────────────
       - name: Install macOS app dependencies
         working-directory: apps/macos
         run: npm ci
 
-      - name: Build macOS DMG
+      # Build arm64 natively on M4 runner — fastest, best M4 Max compatibility
+      - name: Build macOS DMG (arm64)
         working-directory: apps/macos
-        run: npm run build:dir
+        run: npx electron-builder --mac dmg --arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false   # skip code-signing in CI
 
-      # ── 5. Find and rename DMG ──────────────────────────────────────────────
-      - name: Locate build output
-        id: locate
-        run: |
-          BUILD=$(find apps/macos/dist -name "*.app" -maxdepth 3 | head -1)
-          echo "build_path=$BUILD" >> "$GITHUB_OUTPUT"
-          SHA="${{ github.sha }}"
-          echo "short_sha=${SHA:0:7}" >> "$GITHUB_OUTPUT"
+      - name: Get short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
-      # ── 6. Upload artifact ──────────────────────────────────────────────────
-      - name: Upload macOS app
+      - name: Upload arm64 DMG
         uses: actions/upload-artifact@v4
         with:
-          name: huigu-ai-macos-${{ steps.locate.outputs.short_sha }}
-          path: apps/macos/dist/mac*/
+          name: huigu-ai-macos-arm64-${{ steps.sha.outputs.short }}
+          path: apps/macos/dist/*arm64*.dmg
           retention-days: 14
           if-no-files-found: warn
 
-      # ── 7. Comment on PR ────────────────────────────────────────────────────
+  # ── Job 2: x64 + Universal on Intel runner ───────────────────────────────
+  build-x64-universal:
+    name: Build macOS DMG (x64 + Universal)
+    runs-on: macos-13          # Intel runner — x64 native
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            apps/macos/package-lock.json
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        id: web-cache
+        with:
+          path: |
+            apps/web/.next/cache
+            apps/web/.next/standalone
+            apps/web/.next/static
+            apps/web/public
+          key: nextjs-x64-${{ hashFiles('apps/web/package-lock.json', 'apps/web/src/**') }}
+          restore-keys: nextjs-x64-
+
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Build Next.js (standalone)
+        if: steps.web-cache.outputs.cache-hit != 'true'
+        working-directory: apps/web
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:8000' }}
+
+      - name: Install macOS app dependencies
+        working-directory: apps/macos
+        run: npm ci
+
+      # x64 native + universal (fat binary = arm64 + x64 lipo'd together)
+      - name: Build macOS DMG (x64 + Universal)
+        working-directory: apps/macos
+        run: npx electron-builder --mac dmg --x64 --universal
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Get short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload x64 DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: huigu-ai-macos-x64-${{ steps.sha.outputs.short }}
+          path: apps/macos/dist/*x64*.dmg
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload Universal DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: huigu-ai-macos-universal-${{ steps.sha.outputs.short }}
+          path: apps/macos/dist/*universal*.dmg
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ── Job 3: PR comment after both jobs finish ──────────────────────────────
+  comment-pr:
+    name: Comment on PR
+    needs: [build-arm64, build-x64-universal]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+
+    steps:
       - name: Comment on PR
-        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
@@ -93,15 +187,21 @@ jobs:
               body: [
                 '## 🖥️ 慧股AI macOS',
                 '',
-                '✅ **macOS 客户端构建成功！**',
+                '✅ **macOS 客户端构建成功！** 三种架构均已就绪。',
+                '',
+                '| 架构 | 适用机型 | CI Runner |',
+                '|------|---------|-----------|',
+                '| **arm64** | M1 / M2 / M3 / **M4 Max** ✅ | macos-15 (M4 Pro 原生编译) |',
+                '| **x64** | Intel Mac | macos-13 (Intel 原生编译) |',
+                '| **Universal** | 全兼容（推荐正式发布用） | macos-13 lipo 合并 |',
                 '',
                 `| 字段 | 值 |`,
                 `|------|-----|`,
                 `| 🔖 Commit | \`${sha}\` |`,
-                `| 📥 下载 | [点击前往 Actions 页面下载 .app](${runUrl}) |`,
+                `| 📥 下载 | [点击前往 Actions 页面下载 DMG](${runUrl}) |`,
                 '',
-                '> **安装说明：** 下载后解压，将 慧股AI.app 拖入「应用程序」文件夹。',
-                '> 首次运行需在「安全性与隐私」中允许运行（CI 构建未签名）。',
+                '> **安装说明：** 下载 DMG 后，将 慧股AI.app 拖入「应用程序」文件夹。',
+                '> 首次运行：右键 → 打开（CI 构建未签名，跳过 Gatekeeper）。',
                 '',
                 '---',
                 '*由 GitHub Actions 自动构建 · 保留 14 天*',
