@@ -29,6 +29,8 @@ function startWebServer() {
         PORT: String(WEB_PORT),
         NODE_ENV: 'production',
         HOSTNAME: '127.0.0.1',
+        // Forward API key so Next.js AI routes can call Claude
+        ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
       },
       stdio: 'pipe',
     });
