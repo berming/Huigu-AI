@@ -39,8 +39,10 @@ jobs:
             apps/web/.next/standalone
             apps/web/.next/static
             apps/web/public
-          key: nextjs-${{ runner.os }}-${{ hashFiles('apps/web/package-lock.json', 'apps/web/src/**') }}
-          restore-keys: nextjs-${{ runner.os }}-
+          # Key includes app source so cache is invalidated on any source change.
+          # NEXT_PUBLIC_API_URL is baked into the build, so include it in the key too.
+          key: nextjs-${{ runner.os }}-electron-${{ hashFiles('apps/web/package-lock.json', 'apps/web/app/**', 'apps/web/lib/**', 'apps/web/components/**') }}
+          restore-keys: nextjs-${{ runner.os }}-electron-
 
       - name: Install web dependencies
         working-directory: apps/web
@@ -51,7 +53,10 @@ jobs:
         working-directory: apps/web
         run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:8000' }}
+          # In Electron the frontend and Next.js server share the same process/port.
+          # The frontend detects Electron via window.electronAPI and overrides this at
+          # runtime, but set it here too so SSR paths also resolve correctly.
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:3000
 
       - name: Ensure web/public exists
         run: mkdir -p apps/web/public
