@@ -1,6 +1,13 @@
 import axios from 'axios';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// When running inside Electron the Next.js server is on port 3000 (same process).
+// The preload script exposes window.electronAPI; use that to detect Electron.
+const BASE_URL = (() => {
+  if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    return 'http://127.0.0.1:3000';
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+})();
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
