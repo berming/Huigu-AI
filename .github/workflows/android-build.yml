@@ -97,14 +97,13 @@ jobs:
       #  --parallel     builds independent subprojects concurrently
       #  workers=4      ubuntu-latest has 4 vCPUs
       #  -PbundleInDebug=false  skip JS bundle in debug (use Metro instead)
-      - name: Build debug APK
+      - name: Build debug APK (with JS bundle)
         working-directory: apps/mobile/android
         run: >
           ./gradlew assembleDebug
           --no-daemon
           --build-cache
           --parallel
-          -PbundleInDebug=false
         env:
           GRADLE_OPTS: >-
             -Dorg.gradle.daemon=false
@@ -183,7 +182,7 @@ jobs:
                 `| 📥 下载地址 | [点击前往 Actions 页面下载](${artifactUrl}) |`,
                 '',
                 '> **安装说明：** 下载 APK 后，在 Android 手机上开启"未知来源安装"，然后安装即可。',
-                '> 这是调试版本（Debug APK），仅用于测试，不含代码混淆。',
+                '> 这是单机版 Release APK，无需后台服务器，数据内置。',
                 '',
                 '---',
                 '*由 GitHub Actions 自动构建 · 保留 30 天*',
