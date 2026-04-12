@@ -48,32 +48,53 @@ STOCKS = [
 ]
 
 # ── 报告场次配置 ───────────────────────────────────────────
-# 每日两次定时运行：
-#   12:00 BJ → noon  （午间报告，反映上午盘中/午休行情）
-#   17:00 BJ → daily （每日收盘报告，反映全日收盘数据）
+# 每日两次定时运行（BJ 时间）：
+#   12:00 → noon  （午间报告，反映上午盘中/午休行情）
+#   17:00 → daily （每日收盘报告，反映全日收盘数据）
+# 说明：文件名的 HHMM 使用「实际生成时刻」；session 只决定 HTML 标题 /
+# 免责声明 / 跳过判断的时间窗（noon = 00:00–14:59，daily = 15:00–23:59）。
 SESSIONS = {
     "noon": {
-        "hhmm":   "1200",
         "title":  "A股午报",
         "slot":   "午间",
         "period": "上午盘中（11:30 前后）快照",
         "disc":   "图表为上午休市附近的盘中快照",
+        "window": (0, 15),   # [start, end)  小时窗口（半开区间）
     },
     "daily": {
-        "hhmm":   "1700",
         "title":  "A股日报",
         "slot":   "每日",
         "period": "全日收盘（15:00）快照",
         "disc":   "图表为当日收盘后快照",
+        "window": (15, 24),
     },
 }
+
+def get_bj_now() -> datetime.datetime:
+    """当前北京时间（naive datetime，便于 strftime）。"""
+    return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)
 
 def detect_session() -> str:
     """根据当前北京时间判断报告场次：
        北京时间 < 15:00（下午收盘前）→ noon（午间）
        否则                          → daily（每日收盘）"""
-    bj_now = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)
-    return "noon" if bj_now.hour < 15 else "daily"
+    return "noon" if get_bj_now().hour < 15 else "daily"
+
+def find_existing_report(t_day: datetime.date, session: str):
+    """扫描 reports/ 中属于 (t_day, session) 时间窗的报告。存在即返回第一个 Path，
+    否则返回 None。用于决定是否跳过重复生成。"""
+    start_h, end_h = SESSIONS[session]["window"]
+    file_date      = t_day.strftime("%Y%m%d")
+    pattern        = f"astock_{file_date}_*.html"
+    for p in sorted(REPORT_DIR.glob(pattern)):
+        # 匹配 _HHMM.html 后缀
+        m = re.search(r"_(\d{4})\.html$", p.name)
+        if not m:
+            continue
+        hh = int(m.group(1)[:2])
+        if start_h <= hh < end_h:
+            return p
+    return None
 
 def parse_session_arg(argv) -> str:
     """解析命令行 --session noon|daily，未指定则按时间自动判断。"""
@@ -310,20 +331,23 @@ def fmt_pct(val) -> str:
 def generate_html(t_day: datetime.date, indices: dict,
                   stocks: list, news: list,
                   guba_html: str = "",
-                  session: str = "daily") -> str:
+                  session: str = "daily",
+                  gen_dt: datetime.datetime = None) -> str:
     meta = SESSIONS[session]
     title_name = meta["title"]   # A股午报 / A股日报
     slot_name  = meta["slot"]    # 午间 / 每日
     period_txt = meta["period"]  # 盘中快照 / 收盘快照
     disc_txt   = meta["disc"]
-    hhmm       = meta["hhmm"]    # 1200 / 1700
+
+    if gen_dt is None:
+        gen_dt = get_bj_now()
+    hhmm_now   = gen_dt.strftime("%H%M")   # 实际生成时刻
 
     date_str  = t_day.strftime("%Y年%-m月%-d日")
     weekday   = ["周一","周二","周三","周四","周五","周六","周日"][t_day.weekday()]
-    gen_time  = (datetime.datetime.now(datetime.timezone.utc)
-                 + datetime.timedelta(hours=8)).strftime("%H:%M")
+    gen_time  = gen_dt.strftime("%H:%M")
     file_date  = t_day.strftime("%Y%m%d")
-    file_badge = f"{file_date}_{hhmm}"
+    file_badge = f"{file_date}_{hhmm_now}"
     guba_block     = guba_html if guba_html else ""
     guba_css_block = GUBA_CSS if guba_html else "" 
     # 插入股吧区块标题
@@ -528,7 +552,7 @@ def main(session: str = None):
     if session not in SESSIONS:
         raise ValueError(f"未知 session：{session}")
     meta = SESSIONS[session]
-    log(f"报告场次 = {session}（{meta['title']} · 固定文件后缀 {meta['hhmm']}）")
+    log(f"报告场次 = {session}（{meta['title']}）")
 
     t_day = get_t_day()
     today = get_today_bj()
@@ -537,12 +561,18 @@ def main(session: str = None):
     if not is_trading_day(today):
         log(f"今日 {today} 为非交易日，按最近交易日 T = {t_day} 生成报告")
 
-    # 检查是否已存在（文件名含时分，午间 / 每日 各自独立）
-    file_date   = t_day.strftime("%Y%m%d")
-    report_path = REPORT_DIR / f"astock_{file_date}_{meta['hhmm']}.html"
-    if report_path.exists() and "--force" not in sys.argv:
-        log(f"报告已存在: {report_path}，跳过（使用 --force 强制重新生成）")
+    # 跳过判断：同一交易日、同场次时间窗内已有报告就不再重复生成
+    existing = find_existing_report(t_day, session)
+    if existing and "--force" not in sys.argv:
+        log(f"{meta['slot']}报告已存在: {existing.name}，跳过（使用 --force 强制重新生成）")
         sys.exit(0)
+
+    # 实际生成时刻 → 文件名 HHMM
+    gen_dt      = get_bj_now()
+    hhmm_now    = gen_dt.strftime("%H%M")
+    file_date   = t_day.strftime("%Y%m%d")
+    report_path = REPORT_DIR / f"astock_{file_date}_{hhmm_now}.html"
+    log(f"输出文件 = {report_path.name}（按生成时刻 {gen_dt.strftime('%H:%M')} 命名）")
 
     # 抓行情数据
     log("抓取指数行情...")
@@ -575,7 +605,7 @@ def main(session: str = None):
     # 生成 HTML（内含图表下载）
     log("生成报告 HTML（含图表快照下载）...")
     html = generate_html(t_day, indices, stock_data, news,
-                         guba_html=guba_html, session=session)
+                         guba_html=guba_html, session=session, gen_dt=gen_dt)
 
     report_path.write_text(html, encoding="utf-8")
     size_kb = report_path.stat().st_size // 1024

@@ -81,12 +81,20 @@ def git_commit_push(files: list[Path], t_day: datetime.date, session: str = "dai
         log.info("没有新文件需要提交")
         return
 
-    # 查场次元信息（标题/时分后缀）
+    # 查场次元信息（仅用于 commit 标题：A股午报 / A股日报）
     sys.path.insert(0, str(Path(__file__).parent))
     from generate_report import SESSIONS
     meta       = SESSIONS.get(session, SESSIONS["daily"])
-    title_name = meta["title"]    # A股午报 / A股日报
-    hhmm       = meta["hhmm"]     # 1200 / 1700
+    title_name = meta["title"]
+
+    # 从被提交文件名中解析实际生成时分（astock_YYYYMMDD_HHMM.html）
+    import re
+    hh_mm_list = []
+    for f in files:
+        m = re.search(r"_(\d{2})(\d{2})\.html$", f.name)
+        if m:
+            hh_mm_list.append(f"{m.group(1)}:{m.group(2)}")
+    hh_mm_tag = " / ".join(hh_mm_list) if hh_mm_list else ""
 
     # 配置 git 身份（首次运行时）
     run(["git", "config", "user.email", "huigu-ai@auto.bot"], cwd=REPO_DIR, check=False)
@@ -105,8 +113,8 @@ def git_commit_push(files: list[Path], t_day: datetime.date, session: str = "dai
     # git commit
     date_cn  = t_day.strftime("%Y年%-m月%-d日")
     weekday  = ["周一","周二","周三","周四","周五","周六","周日"][t_day.weekday()]
-    hh_mm    = f"{hhmm[:2]}:{hhmm[2:]}"
-    msg      = f"📊 {title_name} {date_cn}（{weekday} {hh_mm}）[自动存档]"
+    suffix   = f" {hh_mm_tag}" if hh_mm_tag else ""
+    msg      = f"📊 {title_name} {date_cn}（{weekday}{suffix}）[自动存档]"
     run(["git", "commit", "-m", msg], cwd=REPO_DIR)
 
     # git push
