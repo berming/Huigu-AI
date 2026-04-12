@@ -80,22 +80,6 @@ def detect_session() -> str:
        否则                          → daily（每日收盘）"""
     return "noon" if get_bj_now().hour < 15 else "daily"
 
-def find_existing_report(t_day: datetime.date, session: str):
-    """扫描 reports/ 中属于 (t_day, session) 时间窗的报告。存在即返回第一个 Path，
-    否则返回 None。用于决定是否跳过重复生成。"""
-    start_h, end_h = SESSIONS[session]["window"]
-    file_date      = t_day.strftime("%Y%m%d")
-    pattern        = f"astock_{file_date}_*.html"
-    for p in sorted(REPORT_DIR.glob(pattern)):
-        # 匹配 _HHMM.html 后缀
-        m = re.search(r"_(\d{4})\.html$", p.name)
-        if not m:
-            continue
-        hh = int(m.group(1)[:2])
-        if start_h <= hh < end_h:
-            return p
-    return None
-
 def parse_session_arg(argv) -> str:
     """解析命令行 --session noon|daily，未指定则按时间自动判断。"""
     if "--session" in argv:
@@ -784,18 +768,26 @@ def main(session: str = None):
     if not is_trading_day(today):
         log(f"今日 {today} 为非交易日，按最近交易日 T = {t_day} 生成报告")
 
-    # 跳过判断：同一交易日、同场次时间窗内已有报告就不再重复生成
-    existing = find_existing_report(t_day, session)
-    if existing and "--force" not in sys.argv:
-        log(f"{meta['slot']}报告已存在: {existing.name}，跳过（使用 --force 强制重新生成）")
-        sys.exit(0)
-
     # 实际生成时刻 → 文件名 HHMM
     gen_dt      = get_bj_now()
     hhmm_now    = gen_dt.strftime("%H%M")
     file_date   = t_day.strftime("%Y%m%d")
     report_path = REPORT_DIR / f"astock_{file_date}_{hhmm_now}.html"
     log(f"输出文件 = {report_path.name}（按生成时刻 {gen_dt.strftime('%H:%M')} 命名）")
+
+    # 覆盖语义：清掉同一交易日、同场次时间窗内已有的旧报告，再写入新时刻文件
+    start_h, end_h = meta["window"]
+    for p in sorted(REPORT_DIR.glob(f"astock_{file_date}_*.html")):
+        m = re.search(r"_(\d{4})\.html$", p.name)
+        if not m:
+            continue
+        hh = int(m.group(1)[:2])
+        if start_h <= hh < end_h and p.resolve() != report_path.resolve():
+            try:
+                p.unlink()
+                log(f"  ↻ 覆盖旧{meta['slot']}报告: {p.name}")
+            except OSError as e:
+                log(f"  ⚠ 无法移除旧报告 {p.name}: {e}")
 
     # 抓行情数据
     log("抓取指数行情...")

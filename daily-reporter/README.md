@@ -1,6 +1,6 @@
 # Huigu-AI · A股日报自动存档系统
 
-每日 **12:00（午间报告）** 与 **17:00（每日收盘报告）**（北京时间）各自动生成一份 A股动态报告，推送至 GitHub 仓库 `daily-reporter/reports/` 目录。报告文件名带"实际生成时刻"时分后缀（`astock_YYYYMMDD_HHMM.html`，例如 `astock_20260413_1201.html` / `astock_20260413_1702.html`），午间与每日场次互不覆盖。
+每日 **12:00（午间报告）** 与 **17:00（每日收盘报告）**（北京时间）各自动生成一份 A股动态报告，推送至 GitHub 仓库 `daily-reporter/reports/` 目录。报告文件名带"实际生成时刻"时分后缀（`astock_YYYYMMDD_HHMM.html`，例如 `astock_20260413_1201.html` / `astock_20260413_1702.html`）。同一场次（午间 `00:00–14:59` / 每日 `15:00–23:59`）重复运行时，旧报告会被自动删除、写入最新时刻的新报告；两个场次互不覆盖。
 
 ## 项目结构
 
@@ -60,12 +60,9 @@ python3 scripts/run_daily.py
 python3 scripts/run_daily.py --session noon     # 午间报告
 python3 scripts/run_daily.py --session daily    # 每日收盘报告
 
-# 只生成报告（不推送）
+# 只生成报告（不推送）—— 同场次时间窗内若已有旧报告会被自动覆盖
 python3 scripts/generate_report.py --session noon
 python3 scripts/generate_report.py --session daily
-
-# 强制重新生成
-python3 scripts/generate_report.py --session daily --force
 
 # 只测试股吧抓取
 python3 scripts/fetch_guba.py
