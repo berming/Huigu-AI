@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 generate_report.py
-每交易日 17:00 自动生成 A股动态报告（HTML），存档到 reports/ 目录。
+每交易日 12:00（午间） / 17:00（每日收盘）自动生成 A股动态报告（HTML），
+存档到 reports/ 目录。
 - 分时图 / 日K线在生成时下载，以 base64 内嵌入 HTML（离线可查、git 存档完整）
 - 个股卡片单列全宽展示，图表更大更清晰
+- 报告文件名带时分后缀（HHMM），午间与每日两份不互相覆盖
 依赖：Python 3.8+，仅标准库
 """
 
@@ -44,6 +46,45 @@ STOCKS = [
     {"name": "中航光电", "code": "002179", "market": "sz", "tag": "连接器/液冷"},
     {"name": "科大讯飞", "code": "002230", "market": "sz", "tag": "AI大模型"},
 ]
+
+# ── 报告场次配置 ───────────────────────────────────────────
+# 每日两次定时运行：
+#   12:00 BJ → noon  （午间报告，反映上午盘中/午休行情）
+#   17:00 BJ → daily （每日收盘报告，反映全日收盘数据）
+SESSIONS = {
+    "noon": {
+        "hhmm":   "1200",
+        "title":  "A股午报",
+        "slot":   "午间",
+        "period": "上午盘中（11:30 前后）快照",
+        "disc":   "图表为上午休市附近的盘中快照",
+    },
+    "daily": {
+        "hhmm":   "1700",
+        "title":  "A股日报",
+        "slot":   "每日",
+        "period": "全日收盘（15:00）快照",
+        "disc":   "图表为当日收盘后快照",
+    },
+}
+
+def detect_session() -> str:
+    """根据当前北京时间判断报告场次：
+       北京时间 < 15:00（下午收盘前）→ noon（午间）
+       否则                          → daily（每日收盘）"""
+    bj_now = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)
+    return "noon" if bj_now.hour < 15 else "daily"
+
+def parse_session_arg(argv) -> str:
+    """解析命令行 --session noon|daily，未指定则按时间自动判断。"""
+    if "--session" in argv:
+        idx = argv.index("--session")
+        if idx + 1 < len(argv):
+            val = argv[idx + 1].strip().lower()
+            if val in SESSIONS:
+                return val
+            raise ValueError(f"未知 --session 值：{val}（允许：noon / daily）")
+    return detect_session()
 
 # ── 上交所法定休市日 ────────────────────────────────────────
 SSE_HOLIDAYS_2026 = {
@@ -268,12 +309,21 @@ def fmt_pct(val) -> str:
 
 def generate_html(t_day: datetime.date, indices: dict,
                   stocks: list, news: list,
-                  guba_html: str = "") -> str:
+                  guba_html: str = "",
+                  session: str = "daily") -> str:
+    meta = SESSIONS[session]
+    title_name = meta["title"]   # A股午报 / A股日报
+    slot_name  = meta["slot"]    # 午间 / 每日
+    period_txt = meta["period"]  # 盘中快照 / 收盘快照
+    disc_txt   = meta["disc"]
+    hhmm       = meta["hhmm"]    # 1200 / 1700
+
     date_str  = t_day.strftime("%Y年%-m月%-d日")
     weekday   = ["周一","周二","周三","周四","周五","周六","周日"][t_day.weekday()]
     gen_time  = (datetime.datetime.now(datetime.timezone.utc)
                  + datetime.timedelta(hours=8)).strftime("%H:%M")
     file_date  = t_day.strftime("%Y%m%d")
+    file_badge = f"{file_date}_{hhmm}"
     guba_block     = guba_html if guba_html else ""
     guba_css_block = GUBA_CSS if guba_html else "" 
     # 插入股吧区块标题
@@ -367,7 +417,7 @@ def generate_html(t_day: datetime.date, indices: dict,
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>A股日报 · {date_str}</title>
+<title>{title_name} · {date_str}</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;color:#0f172a;padding:20px;line-height:1.5}}
@@ -438,10 +488,10 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 
 <div class="hd">
   <div>
-    <div class="ht">A股日报 · 回顾AI</div>
-    <div class="hs">北京时间 {date_str}（{weekday}）收盘 · 生成于 {gen_time} BJ · Huigu-AI 自动存档</div>
+    <div class="ht">{title_name} · 回顾AI</div>
+    <div class="hs">北京时间 {date_str}（{weekday}）· {period_txt} · 生成于 {gen_time} BJ · Huigu-AI 自动存档</div>
   </div>
-  <span class="bdg">📁 {file_date}</span>
+  <span class="bdg">📁 {file_badge}</span>
 </div>
 
 <div class="sec">主要指数（收盘）</div>
@@ -456,8 +506,8 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 <div class="news"><ul>{news_items}</ul></div>
 
 <div class="disc">
-  ⚠ 本报告由 Huigu-AI 自动生成，数据来自新浪财经 / 同花顺，仅供个人存档参考，不构成投资建议。<br>
-  图表为 {date_str} 收盘后快照，已离线内嵌，无需网络即可查看 · 北京时间（UTC+8）
+  ⚠ 本报告由 Huigu-AI 自动生成（{slot_name}场次 · {gen_time} BJ），数据来自新浪财经 / 同花顺，仅供个人存档参考，不构成投资建议。<br>
+  {disc_txt}，已离线内嵌，无需网络即可查看 · 北京时间（UTC+8）
 </div>
 
 </div>
@@ -468,9 +518,17 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 # 主流程
 # ─────────────────────────────────────────────────────────
 
-def main():
+def main(session: str = None):
     log("=" * 60)
     log("Huigu-AI 日报生成器 启动")
+
+    # 场次：参数 > 命令行 > 按当前 BJ 时间自动判断
+    if session is None:
+        session = parse_session_arg(sys.argv)
+    if session not in SESSIONS:
+        raise ValueError(f"未知 session：{session}")
+    meta = SESSIONS[session]
+    log(f"报告场次 = {session}（{meta['title']} · 固定文件后缀 {meta['hhmm']}）")
 
     t_day = get_t_day()
     today = get_today_bj()
@@ -479,9 +537,9 @@ def main():
     if not is_trading_day(today):
         log(f"今日 {today} 为非交易日，按最近交易日 T = {t_day} 生成报告")
 
-    # 检查是否已存在
+    # 检查是否已存在（文件名含时分，午间 / 每日 各自独立）
     file_date   = t_day.strftime("%Y%m%d")
-    report_path = REPORT_DIR / f"astock_{file_date}.html"
+    report_path = REPORT_DIR / f"astock_{file_date}_{meta['hhmm']}.html"
     if report_path.exists() and "--force" not in sys.argv:
         log(f"报告已存在: {report_path}，跳过（使用 --force 强制重新生成）")
         sys.exit(0)
@@ -516,7 +574,8 @@ def main():
 
     # 生成 HTML（内含图表下载）
     log("生成报告 HTML（含图表快照下载）...")
-    html = generate_html(t_day, indices, stock_data, news, guba_html=guba_html)
+    html = generate_html(t_day, indices, stock_data, news,
+                         guba_html=guba_html, session=session)
 
     report_path.write_text(html, encoding="utf-8")
     size_kb = report_path.stat().st_size // 1024

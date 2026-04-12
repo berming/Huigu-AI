@@ -6,8 +6,9 @@
   安装路径：~/Library/LaunchAgents/com.huigu.astock-daily.plist
 
   说明：
-    每天 17:00（北京时间）触发一次。
-    脚本内部会判断是否为交易日，非交易日直接退出，不做任何操作。
+    每天 12:00（午间报告）和 17:00（每日收盘报告）各触发一次（北京时间）。
+    脚本会根据当前 BJ 时间自动识别 session（<15:00 为 noon，否则 daily），
+    两份报告文件名带时分后缀（astock_YYYYMMDD_1200.html / _1700.html），互不覆盖。
 
   安装方法（终端执行）：
     cp com.huigu.astock-daily.plist ~/Library/LaunchAgents/
@@ -39,14 +40,23 @@
     <string>/Users/YOUR_USERNAME/huigu-reporter/scripts/run_daily.py</string>
   </array>
 
-  <!-- 每天 17:00 触发（24h制，北京时间即本机时间，需确保 Mac 时区为 Asia/Shanghai） -->
+  <!-- 每天 12:00（午间） 和 17:00（每日收盘）各触发一次 -->
+  <!-- 24h 制，北京时间即本机时间，需确保 Mac 时区为 Asia/Shanghai -->
   <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>
-    <integer>17</integer>
-    <key>Minute</key>
-    <integer>0</integer>
-  </dict>
+  <array>
+    <dict>
+      <key>Hour</key>
+      <integer>12</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+    <dict>
+      <key>Hour</key>
+      <integer>17</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+  </array>
 
   <!-- 工作目录 -->
   <key>WorkingDirectory</key>
