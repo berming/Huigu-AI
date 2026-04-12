@@ -34,9 +34,10 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-REPO_URL    = "git@github.com:berming/Huigu-AI.git"
-REPO_DIR    = BASE_DIR / "repo"          # 本地 clone 目录
-REPORTS_SUB = "astock-reports"          # 仓库内子目录
+REPO_URL      = "git@github.com:berming/Huigu-AI.git"
+REPO_DIR      = BASE_DIR / "repo"          # 本地 clone 目录
+REPORTS_SUB   = "astock-reports"           # 仓库内子目录
+TARGET_BRANCH = "main"                     # 报告提交的目标分支
 
 def run(cmd: list, cwd=None, check=True) -> subprocess.CompletedProcess:
     log.info("$ " + " ".join(str(c) for c in cmd))
@@ -52,13 +53,36 @@ def run(cmd: list, cwd=None, check=True) -> subprocess.CompletedProcess:
     return result
 
 def ensure_repo():
-    """确保本地 clone 存在并最新"""
+    """确保本地 clone 存在，并锁定到 TARGET_BRANCH（main）最新状态。"""
     if not REPO_DIR.exists():
-        log.info(f"首次 clone 仓库: {REPO_URL}")
-        run(["git", "clone", REPO_URL, str(REPO_DIR)])
-    else:
-        log.info("拉取最新代码...")
-        run(["git", "pull", "--rebase"], cwd=REPO_DIR)
+        log.info(f"首次 clone 仓库: {REPO_URL} (branch={TARGET_BRANCH})")
+        run(["git", "clone", "--branch", TARGET_BRANCH,
+             REPO_URL, str(REPO_DIR)])
+        return
+
+    log.info(f"同步 origin/{TARGET_BRANCH} ...")
+    # 1) 拉取远端 main 的最新提交
+    run(["git", "fetch", "origin", TARGET_BRANCH], cwd=REPO_DIR)
+    # 2) 切到本地 main（若分支不存在，从 origin/main 创建跟踪分支）
+    current = run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=REPO_DIR, check=False,
+    ).stdout.strip()
+    if current != TARGET_BRANCH:
+        log.info(f"当前分支 = {current!r}，切换到 {TARGET_BRANCH}")
+        ck = run(
+            ["git", "checkout", TARGET_BRANCH],
+            cwd=REPO_DIR, check=False,
+        )
+        if ck.returncode != 0:
+            # 本地没有 main，基于 origin/main 创建跟踪分支
+            run(
+                ["git", "checkout", "-B", TARGET_BRANCH,
+                 f"origin/{TARGET_BRANCH}"],
+                cwd=REPO_DIR,
+            )
+    # 3) 对齐 origin/main（rebase 本地未推送的提交）
+    run(["git", "pull", "--rebase", "origin", TARGET_BRANCH], cwd=REPO_DIR)
 
 def copy_reports() -> list[Path]:
     """将 reports/ 下的新报告复制到 repo 子目录，返回复制的文件列表"""
@@ -117,9 +141,19 @@ def git_commit_push(files: list[Path], t_day: datetime.date, session: str = "dai
     msg      = f"📊 {title_name} {date_cn}（{weekday}{suffix}）[自动存档]"
     run(["git", "commit", "-m", msg], cwd=REPO_DIR)
 
-    # git push
-    run(["git", "push", "origin", "HEAD"], cwd=REPO_DIR)
-    log.info(f"✅ 成功推送到 GitHub: {REPO_URL}")
+    # 推送前保险起见再核对一次当前分支，防止误推到非 main 分支
+    cur = run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=REPO_DIR,
+    ).stdout.strip()
+    if cur != TARGET_BRANCH:
+        raise RuntimeError(
+            f"当前分支为 {cur!r}，拒绝推送（期望 {TARGET_BRANCH}）"
+        )
+
+    # git push —— 显式推到 origin/main
+    run(["git", "push", "origin", TARGET_BRANCH], cwd=REPO_DIR)
+    log.info(f"✅ 成功推送到 GitHub: {REPO_URL} ({TARGET_BRANCH})")
 
 def get_t_day() -> datetime.date:
     """复用 generate_report 的交易日判断"""
