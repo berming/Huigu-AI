@@ -27,6 +27,7 @@ daily-reporter/
 | 指数行情 | 上证/深证/创业板/科创50/上证50 |
 | 个股行情 | 比亚迪/华天科技/三六零/中航光电/科大讯飞 |
 | 图表快照 | 分时图 + 日K线（base64 离线内嵌，git 可存档） |
+| 主力资金追踪 | 近 10 日主力净流入 SVG 柱状图 + 当日 5 档拆解（超大/大/中/小单）+ 5/10 日合计（东方财富 fflow 接口，与同花顺 /funds/ 页面同源） |
 | 股吧洞察 | 延安路老猫K、马上钧看市 帖子提炼（情绪/价位/个股关联） |
 | 要闻摘要 | 新浪财经当日滚动要闻 |
 
@@ -103,6 +104,7 @@ launchctl unload ~/Library/LaunchAgents/com.huigu.astock-daily.plist
 | 指数实时行情 | 新浪财经 `hq.sinajs.cn` |
 | 个股 T 日涨跌幅 | 同花顺 `stockpage.10jqka.com.cn` |
 | 分时图 / 日K线 | 新浪财经图片接口（base64 内嵌 HTML） |
+| 主力资金流向（日线） | 东方财富 `push2his.eastmoney.com/api/qt/stock/fflow/kline/get`（与同花顺 `/funds/` 同源算法） |
 | 股吧帖子 | 东方财富 `i.eastmoney.com/api/guba/postCenterList` |
 | 当日要闻 | 新浪财经滚动新闻 |
 
