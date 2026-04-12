@@ -1,0 +1,12 @@
+# 东方财富股吧 Cookie（需要登录后从 Chrome 复制）
+#
+# 操作步骤：
+#   1. Chrome 打开 https://i.eastmoney.com/1141175439727114
+#   2. 按 F12 → Network → 刷新页面
+#   3. 点击任意一条 i.eastmoney.com 请求
+#   4. Request Headers → 找到 "Cookie" 字段 → 复制完整内容
+#   5. 将下方 YOUR_COOKIE_HERE 替换为复制的内容
+#
+# Cookie 有效期约数天到数周，失效后重复上述步骤更新即可
+#
+YOUR_COOKIE_HERE

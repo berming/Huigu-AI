@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  文件名：com.huigu.astock-daily.plist
+  安装路径：~/Library/LaunchAgents/com.huigu.astock-daily.plist
+
+  说明：
+    每天 17:00（北京时间）触发一次。
+    脚本内部会判断是否为交易日，非交易日直接退出，不做任何操作。
+
+  安装方法（终端执行）：
+    cp com.huigu.astock-daily.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.huigu.astock-daily.plist
+
+  卸载方法：
+    launchctl unload ~/Library/LaunchAgents/com.huigu.astock-daily.plist
+    rm ~/Library/LaunchAgents/com.huigu.astock-daily.plist
+
+  调试（立即运行一次）：
+    launchctl start com.huigu.astock-daily
+
+  查看日志：
+    tail -f ~/huigu-reporter/logs/run_YYYYMMDD.log
+-->
+<plist version="1.0">
+<dict>
+
+  <!-- 任务唯一标识 -->
+  <key>Label</key>
+  <string>com.huigu.astock-daily</string>
+
+  <!-- 执行命令：python3 run_daily.py -->
+  <key>ProgramArguments</key>
+  <array>
+    <!-- ⚠️ 修改为你的 Python3 路径，用 `which python3` 查询 -->
+    <string>/usr/bin/python3</string>
+    <!-- ⚠️ 修改为你的实际项目路径 -->
+    <string>/Users/YOUR_USERNAME/huigu-reporter/scripts/run_daily.py</string>
+  </array>
+
+  <!-- 每天 17:00 触发（24h制，北京时间即本机时间，需确保 Mac 时区为 Asia/Shanghai） -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>17</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <!-- 工作目录 -->
+  <key>WorkingDirectory</key>
+  <string>/Users/YOUR_USERNAME/huigu-reporter</string>
+
+  <!-- 环境变量（PATH 包含 git 路径） -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>LANG</key>
+    <string>zh_CN.UTF-8</string>
+  </dict>
+
+  <!-- 标准输出/错误重定向到日志文件 -->
+  <key>StandardOutPath</key>
+  <string>/Users/YOUR_USERNAME/huigu-reporter/logs/launchd_stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOUR_USERNAME/huigu-reporter/logs/launchd_stderr.log</string>
+
+  <!-- Mac 睡眠期间错过的触发，唤醒后补跑一次 -->
+  <!-- 注意：若 Mac 关机/休眠，launchd 会在下次启动后立即补跑 -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- 失败后不自动重试（避免反复抓取失败造成大量请求） -->
+  <key>ThrottleInterval</key>
+  <integer>3600</integer>
+
+</dict>
+</plist>
