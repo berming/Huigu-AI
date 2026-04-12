@@ -3,13 +3,14 @@
 """
 run_daily.py
 定时任务入口脚本（由 macOS launchd 调用，也可手动运行）。
-流程：确定最近交易日 T → 生成 T 日报告 → push 到 GitHub
+流程：判断报告场次 → 确定最近交易日 T → 生成 T 日报告 → push 到 GitHub
 
 说明：
+  - 每日 12:00 / 17:00 两次触发，分别生成「午间」和「每日」报告
+  - 场次识别：--session noon|daily 优先；未指定则按当前 BJ 时间自动判断
+    （< 15:00 记为 noon，否则 daily）
   - 无论今日是否为交易日，都以「最近交易日 T」为基准生成报告
-  - 若今日是交易日且已过 15:00，T = 今日
-  - 若今日是周末/节假日，T = 上一个交易日
-  - 若当日报告已存在，跳过生成，直接推送（可用 --force 强制重生成）
+  - 若当日当场次报告已存在，跳过生成，直接推送（可用 --force 强制重生成）
 """
 
 import sys
@@ -47,10 +48,19 @@ def main():
     log.info("Huigu-AI 每日任务 启动")
 
     # 1. 导入核心模块
-    from generate_report import get_today_bj, is_trading_day, get_t_day, main as gen_main
+    from generate_report import (
+        get_today_bj, is_trading_day, get_t_day,
+        parse_session_arg, SESSIONS,
+        main as gen_main,
+    )
     from git_push import main as push_main
 
-    # 2. 确定最近交易日 T（无论今日是否交易日都继续）
+    # 2. 判定场次（CLI 优先，否则按当前 BJ 时间自动识别）
+    session = parse_session_arg(sys.argv)
+    meta = SESSIONS[session]
+    log.info(f"报告场次 = {session}（{meta['title']} · 文件后缀 _{meta['hhmm']}）")
+
+    # 3. 确定最近交易日 T（无论今日是否交易日都继续）
     today = get_today_bj()
     t_day = get_t_day()
 
@@ -59,9 +69,9 @@ def main():
     else:
         log.info(f"今日 {today} 非交易日，按最近交易日 T = {t_day} 生成报告")
 
-    # 3. 生成报告
+    # 4. 生成报告
     try:
-        gen_main()
+        gen_main(session=session)
     except SystemExit as e:
         if e.code == 0:
             log.info("报告已存在，跳过生成，继续推送...")
@@ -74,9 +84,9 @@ def main():
         log.error(traceback.format_exc())
         sys.exit(2)
 
-    # 4. Push 到 GitHub
+    # 5. Push 到 GitHub
     try:
-        push_main()
+        push_main(session=session)
     except Exception as e:
         log.error(f"GitHub 推送失败: {e}")
         import traceback

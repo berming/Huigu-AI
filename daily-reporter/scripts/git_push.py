@@ -75,11 +75,18 @@ def copy_reports() -> list[Path]:
             log.info(f"复制: {f.name} → {REPORTS_SUB}/")
     return copied
 
-def git_commit_push(files: list[Path], t_day: datetime.date):
+def git_commit_push(files: list[Path], t_day: datetime.date, session: str = "daily"):
     """将文件 add + commit + push"""
     if not files:
         log.info("没有新文件需要提交")
         return
+
+    # 查场次元信息（标题/时分后缀）
+    sys.path.insert(0, str(Path(__file__).parent))
+    from generate_report import SESSIONS
+    meta       = SESSIONS.get(session, SESSIONS["daily"])
+    title_name = meta["title"]    # A股午报 / A股日报
+    hhmm       = meta["hhmm"]     # 1200 / 1700
 
     # 配置 git 身份（首次运行时）
     run(["git", "config", "user.email", "huigu-ai@auto.bot"], cwd=REPO_DIR, check=False)
@@ -98,7 +105,8 @@ def git_commit_push(files: list[Path], t_day: datetime.date):
     # git commit
     date_cn  = t_day.strftime("%Y年%-m月%-d日")
     weekday  = ["周一","周二","周三","周四","周五","周六","周日"][t_day.weekday()]
-    msg      = f"📊 A股日报 {date_cn}（{weekday}）[自动存档]"
+    hh_mm    = f"{hhmm[:2]}:{hhmm[2:]}"
+    msg      = f"📊 {title_name} {date_cn}（{weekday} {hh_mm}）[自动存档]"
     run(["git", "commit", "-m", msg], cwd=REPO_DIR)
 
     # git push
@@ -111,15 +119,22 @@ def get_t_day() -> datetime.date:
     from generate_report import get_t_day as _get_t_day
     return _get_t_day()
 
-def main():
+def main(session: str = None):
     log.info("=" * 60)
     log.info("Huigu-AI git_push 启动")
     try:
+        # 若未传入场次，则复用 generate_report 的自动识别
+        if session is None:
+            sys.path.insert(0, str(Path(__file__).parent))
+            from generate_report import parse_session_arg
+            session = parse_session_arg(sys.argv)
+        log.info(f"场次 = {session}")
+
         t_day = get_t_day()
         log.info(f"T日 = {t_day}")
         ensure_repo()
         copied = copy_reports()
-        git_commit_push(copied, t_day)
+        git_commit_push(copied, t_day, session=session)
     except Exception as e:
         log.error(f"❌ 失败: {e}")
         import traceback
