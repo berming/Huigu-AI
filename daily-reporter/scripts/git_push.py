@@ -39,10 +39,17 @@ REPO_DIR      = BASE_DIR / "repo"          # 本地 clone 目录
 REPORTS_SUB   = "astock-reports"           # 仓库内子目录
 TARGET_BRANCH = "main"                     # 报告提交的目标分支
 
-def run(cmd: list, cwd=None, check=True) -> subprocess.CompletedProcess:
+# 命令超时（秒）：
+#   本地操作 60s 足够；网络操作（clone/fetch/push）放宽到 180s，避免
+#   SSH handshake / keychain 偶发慢响应打崩定时任务。
+LOCAL_TIMEOUT = 60
+NET_TIMEOUT   = 180
+
+def run(cmd: list, cwd=None, check=True,
+        timeout: int = LOCAL_TIMEOUT) -> subprocess.CompletedProcess:
     log.info("$ " + " ".join(str(c) for c in cmd))
     result = subprocess.run(
-        cmd, cwd=cwd, capture_output=True, text=True, timeout=60
+        cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout
     )
     if result.stdout.strip():
         log.info(result.stdout.strip())
@@ -53,16 +60,29 @@ def run(cmd: list, cwd=None, check=True) -> subprocess.CompletedProcess:
     return result
 
 def ensure_repo():
-    """确保本地 clone 存在，并锁定到 TARGET_BRANCH（main）最新状态。"""
+    """确保本地 clone 存在，并锁定到 TARGET_BRANCH（main）最新状态。
+
+    本地 clone 只用于报告归档 commit & push，不承载任何需要保留的本地
+    commit，所以"对齐 origin/main"用 `git reset --hard origin/main`
+    比 `git pull --rebase` 更确定：
+      - 避免 pull --rebase 内部第二次网络 fetch（launchd 无 TTY 偶发
+        SSH handshake 卡住）
+      - 避免 rebase 阶段启动 sequence editor / hook 等交互性命令
+      - 即便极端场景下本地有未推送的 commit，对应报告仍在 reports/
+        目录（clone 之外），下次运行时 copy_reports 会重新写入并生成
+        新 commit，不会丢数据
+    """
     if not REPO_DIR.exists():
         log.info(f"首次 clone 仓库: {REPO_URL} (branch={TARGET_BRANCH})")
         run(["git", "clone", "--branch", TARGET_BRANCH,
-             REPO_URL, str(REPO_DIR)])
+             REPO_URL, str(REPO_DIR)], timeout=NET_TIMEOUT)
         return
 
     log.info(f"同步 origin/{TARGET_BRANCH} ...")
-    # 1) 拉取远端 main 的最新提交
-    run(["git", "fetch", "origin", TARGET_BRANCH], cwd=REPO_DIR)
+    # 1) 拉取远端 main 的最新提交（唯一一次网络操作）
+    run(["git", "fetch", "origin", TARGET_BRANCH],
+        cwd=REPO_DIR, timeout=NET_TIMEOUT)
+
     # 2) 切到本地 main（若分支不存在，从 origin/main 创建跟踪分支）
     current = run(
         ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -81,8 +101,9 @@ def ensure_repo():
                  f"origin/{TARGET_BRANCH}"],
                 cwd=REPO_DIR,
             )
-    # 3) 对齐 origin/main（rebase 本地未推送的提交）
-    run(["git", "pull", "--rebase", "origin", TARGET_BRANCH], cwd=REPO_DIR)
+
+    # 3) 硬对齐到 origin/main —— 纯本地操作，不会因 rebase / SSH 挂住
+    run(["git", "reset", "--hard", f"origin/{TARGET_BRANCH}"], cwd=REPO_DIR)
 
 def copy_reports() -> list[Path]:
     """将 reports/ 下的新报告复制到 repo 子目录，返回复制的文件列表"""
@@ -152,7 +173,8 @@ def git_commit_push(files: list[Path], t_day: datetime.date, session: str = "dai
         )
 
     # git push —— 显式推到 origin/main
-    run(["git", "push", "origin", TARGET_BRANCH], cwd=REPO_DIR)
+    run(["git", "push", "origin", TARGET_BRANCH],
+        cwd=REPO_DIR, timeout=NET_TIMEOUT)
     log.info(f"✅ 成功推送到 GitHub: {REPO_URL} ({TARGET_BRANCH})")
 
 def get_t_day() -> datetime.date:
