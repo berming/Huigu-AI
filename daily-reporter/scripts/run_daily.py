@@ -58,7 +58,8 @@ def main():
     # 2. 判定场次（CLI 优先，否则按当前 BJ 时间自动识别）
     session = parse_session_arg(sys.argv)
     meta = SESSIONS[session]
-    log.info(f"报告场次 = {session}（{meta['title']} · 文件后缀 _{meta['hhmm']}）")
+    sh, eh = meta["window"]
+    log.info(f"报告场次 = {session}（{meta['title']} · 时间窗 {sh:02d}:00–{eh:02d}:00）")
 
     # 3. 确定最近交易日 T（无论今日是否交易日都继续）
     today = get_today_bj()
