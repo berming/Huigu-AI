@@ -48,32 +48,53 @@ STOCKS = [
 ]
 
 # ── 报告场次配置 ───────────────────────────────────────────
-# 每日两次定时运行：
-#   12:00 BJ → noon  （午间报告，反映上午盘中/午休行情）
-#   17:00 BJ → daily （每日收盘报告，反映全日收盘数据）
+# 每日两次定时运行（BJ 时间）：
+#   12:00 → noon  （午间报告，反映上午盘中/午休行情）
+#   17:00 → daily （每日收盘报告，反映全日收盘数据）
+# 说明：文件名的 HHMM 使用「实际生成时刻」；session 只决定 HTML 标题 /
+# 免责声明 / 跳过判断的时间窗（noon = 00:00–14:59，daily = 15:00–23:59）。
 SESSIONS = {
     "noon": {
-        "hhmm":   "1200",
         "title":  "A股午报",
         "slot":   "午间",
         "period": "上午盘中（11:30 前后）快照",
         "disc":   "图表为上午休市附近的盘中快照",
+        "window": (0, 15),   # [start, end)  小时窗口（半开区间）
     },
     "daily": {
-        "hhmm":   "1700",
         "title":  "A股日报",
         "slot":   "每日",
         "period": "全日收盘（15:00）快照",
         "disc":   "图表为当日收盘后快照",
+        "window": (15, 24),
     },
 }
+
+def get_bj_now() -> datetime.datetime:
+    """当前北京时间（naive datetime，便于 strftime）。"""
+    return datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)
 
 def detect_session() -> str:
     """根据当前北京时间判断报告场次：
        北京时间 < 15:00（下午收盘前）→ noon（午间）
        否则                          → daily（每日收盘）"""
-    bj_now = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)
-    return "noon" if bj_now.hour < 15 else "daily"
+    return "noon" if get_bj_now().hour < 15 else "daily"
+
+def find_existing_report(t_day: datetime.date, session: str):
+    """扫描 reports/ 中属于 (t_day, session) 时间窗的报告。存在即返回第一个 Path，
+    否则返回 None。用于决定是否跳过重复生成。"""
+    start_h, end_h = SESSIONS[session]["window"]
+    file_date      = t_day.strftime("%Y%m%d")
+    pattern        = f"astock_{file_date}_*.html"
+    for p in sorted(REPORT_DIR.glob(pattern)):
+        # 匹配 _HHMM.html 后缀
+        m = re.search(r"_(\d{4})\.html$", p.name)
+        if not m:
+            continue
+        hh = int(m.group(1)[:2])
+        if start_h <= hh < end_h:
+            return p
+    return None
 
 def parse_session_arg(argv) -> str:
     """解析命令行 --session noon|daily，未指定则按时间自动判断。"""
@@ -276,6 +297,205 @@ def fetch_stock_data(stock: dict) -> dict:
 
     return result
 
+# ─────────────────────────────────────────────────────────
+# 主力资金追踪（参考同花顺 /funds/ 页面的口径）
+# 数据源：东方财富 push2his.eastmoney.com/api/qt/stock/fflow/kline/get
+#   - secid = "1.{code}"（沪） / "0.{code}"（深）
+#   - klt  = 101  日线
+#   - 返回 klines 逗号分隔字段（按 fields2 顺序）：
+#       f51 日期 / f52 主力净流入 / f53 小单净流入 / f54 中单净流入 /
+#       f55 大单净流入 / f56 超大单净流入 / f57 主力净流入占比 /
+#       f58 小单占比 / f59 中单占比 / f60 大单占比 / f61 超大单占比 /
+#       f62 收盘价 / f63 涨跌幅
+#   金额单位：元
+# ─────────────────────────────────────────────────────────
+
+def fetch_capital_flow(stock: dict, lmt: int = 10) -> dict:
+    """拉取最近 lmt 个交易日主力资金流向。失败返回 {'ok': False, ...}。"""
+    code   = stock["code"]
+    market = stock["market"]
+    secid  = ("1" if market == "sh" else "0") + "." + code
+    url = (
+        "http://push2his.eastmoney.com/api/qt/stock/fflow/kline/get"
+        f"?lmt={lmt}&klt=101"
+        "&fields1=f1,f2,f3,f7"
+        "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65"
+        f"&secid={secid}"
+    )
+    result = {"ok": False, "name": stock["name"], "days": [], "error": ""}
+    try:
+        raw  = fetch_text(url, timeout=12, referer="https://data.eastmoney.com/")
+        data = json.loads(raw)
+        if data.get("rc") not in (0, None):
+            raise ValueError(f"接口返回 rc={data.get('rc')} em={data.get('em','')}")
+        payload = data.get("data") or {}
+        if payload.get("name"):
+            result["name"] = payload["name"]
+        klines = payload.get("klines") or []
+        days = []
+        for line in klines:
+            parts = line.split(",")
+            if len(parts) < 13:
+                continue
+            def _f(i, typ=float):
+                try:
+                    return typ(parts[i])
+                except Exception:
+                    return 0.0 if typ is float else 0
+            days.append({
+                "date":      parts[0],
+                "main":      _f(1),   # 主力净流入（元）
+                "small":     _f(2),
+                "medium":    _f(3),
+                "large":     _f(4),
+                "xlarge":    _f(5),
+                "main_pct":  _f(6),
+                "small_pct": _f(7),
+                "medium_pct":_f(8),
+                "large_pct": _f(9),
+                "xlarge_pct":_f(10),
+                "close":     _f(11),
+                "chg_pct":   _f(12),
+            })
+        if not days:
+            raise ValueError("klines 为空")
+        result["days"]  = days
+        result["today"] = days[-1]
+        def _sum(n, key):
+            return sum(d[key] for d in days[-n:]) if len(days) >= 1 else 0.0
+        result["sum5"]  = {k: _sum(5,  k) for k in ("main","small","medium","large","xlarge")}
+        result["sum10"] = {k: _sum(10, k) for k in ("main","small","medium","large","xlarge")}
+        result["ok"]    = True
+    except Exception as e:
+        result["error"] = str(e)
+        log(f"  ⚠ 主力资金 {code} 失败: {e}")
+    return result
+
+def fmt_amount_cn(v) -> str:
+    """元 → 中文大数（亿 / 万 / 元），带符号。None / 非数字 → — """
+    try:
+        v = float(v)
+    except Exception:
+        return "—"
+    if v == 0:
+        return "0"
+    sign = "+" if v > 0 else "-"
+    a = abs(v)
+    if a >= 1e8:
+        return f"{sign}{a/1e8:.2f}亿"
+    if a >= 1e4:
+        return f"{sign}{a/1e4:.0f}万"
+    return f"{sign}{int(round(a))}"
+
+def _cf_amount_span(v) -> str:
+    """根据符号给金额加 up/dn 颜色类（沿用本项目 up=绿 / dn=红 的西方配色）。"""
+    try:
+        vv = float(v)
+    except Exception:
+        return '<span class="nt">—</span>'
+    if vv > 0:
+        return f'<span class="up">{fmt_amount_cn(vv)}</span>'
+    if vv < 0:
+        return f'<span class="dn">{fmt_amount_cn(vv)}</span>'
+    return f'<span class="nt">0</span>'
+
+def render_capital_flow(cf: dict) -> str:
+    """生成 stock card 内的主力资金追踪区块（含 SVG 柱状图）。"""
+    if not cf or not cf.get("ok"):
+        err = (cf or {}).get("error", "")
+        return (
+            '<div class="cf-wrap cf-empty">'
+            '<div class="cf-title">💰 主力资金追踪</div>'
+            f'<div class="cf-note">数据暂不可用{("：" + err) if err else ""}</div>'
+            '</div>'
+        )
+    days = cf["days"]
+    today = cf["today"]
+    sum5  = cf["sum5"]
+    sum10 = cf["sum10"]
+
+    # 5 档资金拆解（今日）
+    breakdown = [
+        ("超大单", today["xlarge"]),
+        ("大单",   today["large"]),
+        ("中单",   today["medium"]),
+        ("小单",   today["small"]),
+    ]
+    breakdown_html = "".join(
+        f'<div class="cf-item"><span class="cf-k">{k}</span>{_cf_amount_span(v)}</div>'
+        for k, v in breakdown
+    )
+
+    # ── SVG 10 日柱状图（主力净流入，0 为中线） ──────────────
+    W, H  = 560, 150
+    PAD_L, PAD_R, PAD_T, PAD_B = 6, 6, 14, 22
+    plot_w = W - PAD_L - PAD_R
+    plot_h = H - PAD_T - PAD_B
+    n       = len(days)
+    gap     = 4
+    bar_w   = max(4, (plot_w - gap * (n - 1)) / max(n, 1))
+    max_abs = max((abs(d["main"]) for d in days), default=1.0) or 1.0
+    mid_y   = PAD_T + plot_h / 2
+    bars, labels = [], []
+    for i, d in enumerate(days):
+        x = PAD_L + i * (bar_w + gap)
+        v = d["main"]
+        h = (abs(v) / max_abs) * (plot_h / 2)
+        color = "#16a34a" if v > 0 else ("#dc2626" if v < 0 else "#cbd5e1")
+        if v >= 0:
+            y, rect_h = mid_y - h, h
+        else:
+            y, rect_h = mid_y, h
+        bars.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" '
+            f'height="{max(rect_h,0.5):.1f}" fill="{color}" rx="1"/>'
+        )
+        # 仅对首尾两根与每隔几根显示日期
+        if n <= 6 or i == 0 or i == n - 1 or i % max(1, n // 5) == 0:
+            mmdd = d["date"][5:] if len(d["date"]) >= 10 else d["date"]
+            lx = x + bar_w / 2
+            labels.append(
+                f'<text x="{lx:.1f}" y="{H - 6}" font-size="9" '
+                f'fill="#94a3b8" text-anchor="middle">{mmdd}</text>'
+            )
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
+        f'class="cf-svg" preserveAspectRatio="xMidYMid meet">'
+        f'<rect width="{W}" height="{H}" fill="#fafbfc" rx="4"/>'
+        f'<line x1="{PAD_L}" y1="{mid_y:.1f}" x2="{W-PAD_R}" y2="{mid_y:.1f}" '
+        f'stroke="#e2e8f0" stroke-dasharray="2,2"/>'
+        + "".join(bars) + "".join(labels) +
+        '</svg>'
+    )
+
+    return f"""
+      <div class="cf-wrap">
+        <div class="cf-header">
+          <div class="cf-title">💰 主力资金追踪 · 近 {len(days)} 交易日</div>
+          <div class="cf-hint">数据：东方财富 fflow（与同花顺同源）· 单位 元</div>
+        </div>
+        <div class="cf-kpis">
+          <div class="cf-kpi">
+            <div class="cf-label">今日主力净流入</div>
+            <div class="cf-value">{_cf_amount_span(today['main'])}
+              <span class="cf-pct">{today['main_pct']:+.2f}%</span></div>
+          </div>
+          <div class="cf-kpi">
+            <div class="cf-label">近 5 日合计</div>
+            <div class="cf-value">{_cf_amount_span(sum5['main'])}</div>
+          </div>
+          <div class="cf-kpi">
+            <div class="cf-label">近 {len(days)} 日合计</div>
+            <div class="cf-value">{_cf_amount_span(sum10['main'])}</div>
+          </div>
+        </div>
+        <div class="cf-breakdown">
+          <div class="cf-bd-title">今日 5 档资金拆解</div>
+          <div class="cf-bd-row">{breakdown_html}</div>
+        </div>
+        {svg}
+      </div>"""
+
 def fetch_market_news(t_day: datetime.date) -> list:
     """新浪财经滚动要闻"""
     headlines = []
@@ -310,20 +530,23 @@ def fmt_pct(val) -> str:
 def generate_html(t_day: datetime.date, indices: dict,
                   stocks: list, news: list,
                   guba_html: str = "",
-                  session: str = "daily") -> str:
+                  session: str = "daily",
+                  gen_dt: datetime.datetime = None) -> str:
     meta = SESSIONS[session]
     title_name = meta["title"]   # A股午报 / A股日报
     slot_name  = meta["slot"]    # 午间 / 每日
     period_txt = meta["period"]  # 盘中快照 / 收盘快照
     disc_txt   = meta["disc"]
-    hhmm       = meta["hhmm"]    # 1200 / 1700
+
+    if gen_dt is None:
+        gen_dt = get_bj_now()
+    hhmm_now   = gen_dt.strftime("%H%M")   # 实际生成时刻
 
     date_str  = t_day.strftime("%Y年%-m月%-d日")
     weekday   = ["周一","周二","周三","周四","周五","周六","周日"][t_day.weekday()]
-    gen_time  = (datetime.datetime.now(datetime.timezone.utc)
-                 + datetime.timedelta(hours=8)).strftime("%H:%M")
+    gen_time  = gen_dt.strftime("%H:%M")
     file_date  = t_day.strftime("%Y%m%d")
-    file_badge = f"{file_date}_{hhmm}"
+    file_badge = f"{file_date}_{hhmm_now}"
     guba_block     = guba_html if guba_html else ""
     guba_css_block = GUBA_CSS if guba_html else "" 
     # 插入股吧区块标题
@@ -405,6 +628,8 @@ def generate_html(t_day: datetime.date, indices: dict,
           <img src="{daily_b64}" alt="{s["name"]}日K线" class="chart-img">
         </div>
       </div>
+      <!-- 主力资金追踪（参考同花顺 /funds/ 页面口径） -->
+      {render_capital_flow(s.get("cf"))}
     </div>"""
 
     # ── 要闻列表 ──────────────────────────────────────────
@@ -471,6 +696,28 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 .chart-img{{width:100%;height:auto;min-height:120px;max-height:260px;
             border-radius:6px;display:block;object-fit:contain;background:#f8fafc}}
 
+/* 主力资金追踪 */
+.cf-wrap{{border-top:1px solid #f1f5f9;padding:14px 18px;background:#fdfdfe}}
+.cf-header{{display:flex;align-items:center;justify-content:space-between;
+            margin-bottom:10px;flex-wrap:wrap;gap:6px}}
+.cf-title{{font-size:11px;font-weight:700;color:#475569;letter-spacing:1px}}
+.cf-hint{{font-size:9px;color:#94a3b8;font-weight:400}}
+.cf-note{{font-size:11px;color:#94a3b8;padding:8px 0}}
+.cf-empty{{background:#fafbfc}}
+.cf-kpis{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}}
+.cf-kpi{{background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px}}
+.cf-label{{font-size:9px;color:#94a3b8;margin-bottom:3px;font-weight:500}}
+.cf-value{{font-size:14px;font-weight:700;display:flex;align-items:baseline;gap:6px}}
+.cf-pct{{font-size:10px;color:#64748b;font-weight:500}}
+.cf-breakdown{{background:#fff;border:1px solid #e2e8f0;border-radius:6px;
+               padding:8px 10px;margin-bottom:10px}}
+.cf-bd-title{{font-size:9px;color:#94a3b8;margin-bottom:5px;font-weight:500}}
+.cf-bd-row{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}}
+.cf-item{{display:flex;flex-direction:column;gap:2px;font-size:11px}}
+.cf-k{{font-size:9px;color:#64748b}}
+.cf-svg{{width:100%;height:auto;display:block;border:1px solid #e2e8f0;
+         border-radius:6px;background:#fafbfc}}
+
 /* 要闻 */
 .news{{background:#fff;border-radius:10px;border:1px solid #e2e8f0;padding:14px 18px}}
 .news ul{{padding-left:18px}}
@@ -528,7 +775,7 @@ def main(session: str = None):
     if session not in SESSIONS:
         raise ValueError(f"未知 session：{session}")
     meta = SESSIONS[session]
-    log(f"报告场次 = {session}（{meta['title']} · 固定文件后缀 {meta['hhmm']}）")
+    log(f"报告场次 = {session}（{meta['title']}）")
 
     t_day = get_t_day()
     today = get_today_bj()
@@ -537,12 +784,18 @@ def main(session: str = None):
     if not is_trading_day(today):
         log(f"今日 {today} 为非交易日，按最近交易日 T = {t_day} 生成报告")
 
-    # 检查是否已存在（文件名含时分，午间 / 每日 各自独立）
-    file_date   = t_day.strftime("%Y%m%d")
-    report_path = REPORT_DIR / f"astock_{file_date}_{meta['hhmm']}.html"
-    if report_path.exists() and "--force" not in sys.argv:
-        log(f"报告已存在: {report_path}，跳过（使用 --force 强制重新生成）")
+    # 跳过判断：同一交易日、同场次时间窗内已有报告就不再重复生成
+    existing = find_existing_report(t_day, session)
+    if existing and "--force" not in sys.argv:
+        log(f"{meta['slot']}报告已存在: {existing.name}，跳过（使用 --force 强制重新生成）")
         sys.exit(0)
+
+    # 实际生成时刻 → 文件名 HHMM
+    gen_dt      = get_bj_now()
+    hhmm_now    = gen_dt.strftime("%H%M")
+    file_date   = t_day.strftime("%Y%m%d")
+    report_path = REPORT_DIR / f"astock_{file_date}_{hhmm_now}.html"
+    log(f"输出文件 = {report_path.name}（按生成时刻 {gen_dt.strftime('%H:%M')} 命名）")
 
     # 抓行情数据
     log("抓取指数行情...")
@@ -554,6 +807,8 @@ def main(session: str = None):
     for s in STOCKS:
         log(f"  → {s['name']} ({s['code']})")
         d = fetch_stock_data(s)
+        log(f"    · 主力资金流向（近 10 日）...")
+        d["cf"] = fetch_capital_flow(s, lmt=10)
         stock_data.append(d)
         time.sleep(0.4)
 
@@ -575,7 +830,7 @@ def main(session: str = None):
     # 生成 HTML（内含图表下载）
     log("生成报告 HTML（含图表快照下载）...")
     html = generate_html(t_day, indices, stock_data, news,
-                         guba_html=guba_html, session=session)
+                         guba_html=guba_html, session=session, gen_dt=gen_dt)
 
     report_path.write_text(html, encoding="utf-8")
     size_kb = report_path.stat().st_size // 1024

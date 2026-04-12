@@ -1,6 +1,6 @@
 # Huigu-AI · A股日报自动存档系统
 
-每日 **12:00（午间报告）** 与 **17:00（每日收盘报告）**（北京时间）各自动生成一份 A股动态报告，推送至 GitHub 仓库 `daily-reporter/reports/` 目录。两份报告文件名带时分后缀（`astock_YYYYMMDD_1200.html` / `astock_YYYYMMDD_1700.html`），互不覆盖。
+每日 **12:00（午间报告）** 与 **17:00（每日收盘报告）**（北京时间）各自动生成一份 A股动态报告，推送至 GitHub 仓库 `daily-reporter/reports/` 目录。报告文件名带"实际生成时刻"时分后缀（`astock_YYYYMMDD_HHMM.html`，例如 `astock_20260413_1201.html` / `astock_20260413_1702.html`），午间与每日场次互不覆盖。
 
 ## 项目结构
 
@@ -27,6 +27,7 @@ daily-reporter/
 | 指数行情 | 上证/深证/创业板/科创50/上证50 |
 | 个股行情 | 比亚迪/华天科技/三六零/中航光电/科大讯飞 |
 | 图表快照 | 分时图 + 日K线（base64 离线内嵌，git 可存档） |
+| 主力资金追踪 | 近 10 日主力净流入 SVG 柱状图 + 当日 5 档拆解（超大/大/中/小单）+ 5/10 日合计（东方财富 fflow 接口，与同花顺 /funds/ 页面同源） |
 | 股吧洞察 | 延安路老猫K、马上钧看市 帖子提炼（情绪/价位/个股关联） |
 | 要闻摘要 | 新浪财经当日滚动要闻 |
 
@@ -55,9 +56,9 @@ Cookie 有效期约数天到数周，失效后重复上述步骤更新即可。
 # 未指定 --session 时按当前北京时间自动判断：<15:00 → 午间，否则 → 每日收盘
 python3 scripts/run_daily.py
 
-# 明确指定场次
-python3 scripts/run_daily.py --session noon     # 午间报告（文件后缀 _1200）
-python3 scripts/run_daily.py --session daily    # 每日收盘报告（文件后缀 _1700）
+# 明确指定场次（文件名 HHMM 仍按当前实际时刻）
+python3 scripts/run_daily.py --session noon     # 午间报告
+python3 scripts/run_daily.py --session daily    # 每日收盘报告
 
 # 只生成报告（不推送）
 python3 scripts/generate_report.py --session noon
@@ -103,6 +104,7 @@ launchctl unload ~/Library/LaunchAgents/com.huigu.astock-daily.plist
 | 指数实时行情 | 新浪财经 `hq.sinajs.cn` |
 | 个股 T 日涨跌幅 | 同花顺 `stockpage.10jqka.com.cn` |
 | 分时图 / 日K线 | 新浪财经图片接口（base64 内嵌 HTML） |
+| 主力资金流向（日线） | 东方财富 `push2his.eastmoney.com/api/qt/stock/fflow/kline/get`（与同花顺 `/funds/` 同源算法） |
 | 股吧帖子 | 东方财富 `i.eastmoney.com/api/guba/postCenterList` |
 | 当日要闻 | 新浪财经滚动新闻 |
 
