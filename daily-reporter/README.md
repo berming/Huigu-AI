@@ -9,23 +9,35 @@ daily-reporter/
 ├── scripts/
 │   ├── generate_report.py   # 核心：指数/个股/图表/股吧 → 生成 HTML
 │   ├── fetch_guba.py        # 东财股吧大V帖子抓取与提炼
-│   ├── git_push.py          # 报告 commit & push 到 GitHub
+│   ├── git_push.py          # 报告在主工作区 commit & push 到 origin/main
 │   └── run_daily.py         # 定时任务入口（launchd 调用）
 ├── config/
 │   └── cookie.txt           # 东财 Cookie（本地填写，不提交真实值）
-├── reports/                 # 自动生成的 HTML 报告存档
-├── logs/                    # 运行日志
+├── reports/                 # 自动生成的 HTML 报告存档（会被提交到 git）
+├── logs/                    # 运行日志（*.log 已在根 .gitignore 中）
 ├── com.huigu.astock-daily.plist  # macOS launchd 定时任务
 ├── setup.sh                 # 一键安装脚本
 └── README.md
 ```
+
+## 提交策略
+
+`git_push.py` **直接在主工作区**（你的 clone 本身）里 commit `daily-reporter/reports/` 下的新报告，再 push 到 `origin/main`。
+
+提交前有 3 道安全门禁，任何一道不通过都会**拒绝提交**并把报告文件留在本地等待下次运行：
+
+1. 当前必须在 `main` 分支
+2. `daily-reporter/reports/` 之外不能有未提交的改动（保护你正在写的代码）
+3. 本地 `main` 不能领先 `origin/main`（保护你本地未推送的 commit）
+
+如果 `origin/main` 领先本地，会先做一次 `git merge --ff-only` 快进合并，再提交报告。
 
 ## 功能概览
 
 | 模块 | 内容 |
 |---|---|
 | 指数行情 | 上证/深证/创业板/科创50/上证50 |
-| 个股行情 | 比亚迪/华天科技/三六零/中航光电/科大讯飞 |
+| 个股行情 | 比亚迪/华天科技/三六零/中航光电/科大讯飞/华胜天成/立讯精密/浪潮信息/通威股份 |
 | 图表快照 | 分时图 + 日K线（base64 离线内嵌，git 可存档） |
 | 主力资金追踪 | 近 10 日主力净流入 SVG 柱状图 + 当日 5 档拆解（超大/大/中/小单）+ 5/10 日合计（东方财富 fflow 接口，与同花顺 /funds/ 页面同源） |
 | 股吧洞察 | 延安路老猫K、马上钧看市 帖子提炼（情绪/价位/个股关联） |
@@ -96,6 +108,7 @@ launchctl unload ~/Library/LaunchAgents/com.huigu.astock-daily.plist
 | 华胜天成 | 600410 | 云计算 / 算力 / 国产化 |
 | 立讯精密 | 002475 | 消费电子 / 连接器 / 苹果产业链 |
 | 浪潮信息 | 000977 | AI服务器 / 算力龙头 |
+| 通威股份 | 600438 | 光伏 / 硅料龙头 |
 
 ## 数据来源
 
