@@ -19,11 +19,14 @@ git_push.py
 依赖：git（系统自带）、已配置好 SSH key（或 HTTPS token）
 """
 
+import os
+import signal
 import sys
 import subprocess
 import datetime
 import logging
 import re
+import time
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent    # huigu-reporter/scripts/
@@ -47,31 +50,148 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-TARGET_BRANCH   = "main"
+TARGET_BRANCH    = "main"
 REPORTS_PATHSPEC = "daily-reporter/reports"     # 相对主仓库根的路径
 
-# 命令超时（秒）：
-#   本地操作 60s 足够；网络操作（fetch/push）放宽到 180s，避免 SSH
-#   handshake / keychain 偶发慢响应打崩定时任务。
-LOCAL_TIMEOUT = 60
-NET_TIMEOUT   = 180
+# ── 命令超时（秒） ─────────────────────────────────────────
+# 本地 git 命令 60s 足够。
+# 网络命令（fetch/push）——历史上出现过 `git push` 180s 完全无输出
+# 卡死的情况（根因：stale SSH ControlMaster socket / 死 TCP 连接）。
+# 策略：每次 60s 快速失败，配合 killpg 清掉孤儿 ssh 子进程 + 重试。
+LOCAL_TIMEOUT   = 60
+NET_TIMEOUT     = 60                         # 每次网络尝试的超时
+NET_MAX_ATTEMPTS = 4                          # 网络命令最多尝试次数
+NET_BACKOFF     = (2, 4, 8, 16)               # 重试之间的等待秒数
+
+# 网络命令的 SSH 环境变量：
+#   - ControlMaster=no / ControlPath=none  强制每次新建 SSH 连接，避免
+#     launchd 无 TTY 场景下 stale 多路复用 socket 让第二次连接挂死
+#   - ServerAliveInterval=10 / ServerAliveCountMax=6  60 秒内对端无响应
+#     即主动断开（否则 TCP 层死连接会让 ssh 傻等到天荒地老）
+NET_SSH_ENV = {
+    "GIT_SSH_COMMAND": (
+        "ssh "
+        "-o ControlMaster=no "
+        "-o ControlPath=none "
+        "-o ServerAliveInterval=10 "
+        "-o ServerAliveCountMax=6"
+    ),
+}
+
+
+def _popen_with_session(cmd, cwd, env, timeout):
+    """用 Popen 启动子进程并给一个独立 process group；超时则用 killpg
+    把整个 group（包括 git fork 出的 ssh / ssh fork 出的 ssh-askpass 等）
+    一锅端，避免孤儿进程继续握住 stale 网络 socket。"""
+    p = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,      # 新 session → 独立 process group
+    )
+    try:
+        stdout, stderr = p.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(cmd, p.returncode, stdout, stderr)
+    except subprocess.TimeoutExpired:
+        # 杀整组，清理 git 及其 fork 出的 ssh
+        try:
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+        # 再给 5 秒抽干残余输出
+        try:
+            stdout, stderr = p.communicate(timeout=5)
+        except Exception:
+            stdout, stderr = "", ""
+        raise subprocess.TimeoutExpired(
+            cmd, timeout, output=stdout, stderr=stderr
+        )
+
 
 def run(cmd: list, cwd=None, check=True,
-        timeout: int = LOCAL_TIMEOUT) -> subprocess.CompletedProcess:
+        timeout: int = LOCAL_TIMEOUT,
+        extra_env: dict = None) -> subprocess.CompletedProcess:
+    """执行子进程。带 process-group 超时清理、日志、non-zero 异常抛出。"""
     log.info("$ " + " ".join(str(c) for c in cmd))
-    result = subprocess.run(
-        cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout
-    )
-    if result.stdout.strip():
+    env = os.environ.copy()
+    if extra_env:
+        env.update(extra_env)
+    result = _popen_with_session(cmd, cwd=cwd, env=env, timeout=timeout)
+    if result.stdout and result.stdout.strip():
         log.info(result.stdout.strip())
-    if result.stderr.strip():
+    if result.stderr and result.stderr.strip():
         log.info(result.stderr.strip())
     if check and result.returncode != 0:
+        # 把 stderr 一并塞进错误消息，便于上层 run_net 根据关键词判定是否
+        # 为 transient 网络错误（"connection refused" 等）
+        err_detail = (result.stderr or result.stdout or "").strip()
+        detail = f" | {err_detail[:200]}" if err_detail else ""
         raise RuntimeError(
             f"命令失败 (code={result.returncode}): "
-            f"{' '.join(str(c) for c in cmd)}"
+            f"{' '.join(str(c) for c in cmd)}{detail}"
         )
     return result
+
+
+def run_net(cmd: list, cwd=None, check=True,
+            timeout: int = NET_TIMEOUT,
+            max_attempts: int = NET_MAX_ATTEMPTS,
+            backoff=NET_BACKOFF) -> subprocess.CompletedProcess:
+    """执行网络 git 命令（fetch / push）带自动重试。每次尝试：
+    1) 以 NET_SSH_ENV 强制新建 SSH 连接 + 启用 keepalive
+    2) timeout 超时 → killpg 清理 → 按 backoff 等待 → 再来一次
+    3) 非超时的 transient 网络错误也会触发重试；鉴权 / 非 ff 拒绝等错误
+       直接抛出不重试（重试无用）。
+    """
+    last_err = None
+    for attempt in range(1, max_attempts + 1):
+        label = f"第 {attempt}/{max_attempts} 次"
+        if attempt > 1:
+            log.info(f"🔁 {label}尝试网络命令: {' '.join(str(c) for c in cmd)}")
+        try:
+            return run(cmd, cwd=cwd, check=check, timeout=timeout,
+                       extra_env=NET_SSH_ENV)
+        except subprocess.TimeoutExpired as e:
+            last_err = e
+            if attempt < max_attempts:
+                wait = backoff[min(attempt - 1, len(backoff) - 1)]
+                log.info(
+                    f"⏱  {label}超时 ({timeout}s)，已 killpg 清理 ssh，"
+                    f"{wait}s 后重试"
+                )
+                time.sleep(wait)
+            else:
+                log.error(f"❌ 网络命令重试 {max_attempts} 次仍超时")
+        except RuntimeError as e:
+            last_err = e
+            msg_low = str(e).lower()
+            # 仅对 transient 网络错误重试；鉴权 / 非 ff 拒绝立即失败
+            transient_markers = (
+                "could not resolve",
+                "connection",
+                "network",
+                "early eof",
+                "unable to access",
+                "the remote end hung up",
+                "broken pipe",
+                "ssh: connect to host",
+                "timed out",
+            )
+            is_transient = any(k in msg_low for k in transient_markers)
+            if is_transient and attempt < max_attempts:
+                wait = backoff[min(attempt - 1, len(backoff) - 1)]
+                log.info(
+                    f"⚠  {label}失败（疑似瞬时网络错误）：{str(e)[:100]}，"
+                    f"{wait}s 后重试"
+                )
+                time.sleep(wait)
+            else:
+                raise
+    # 所有尝试都失败
+    raise last_err if last_err else RuntimeError("网络命令重试耗尽")
 
 
 def find_repo_root() -> Path:
@@ -124,10 +244,10 @@ def ensure_on_main_clean(repo_root: Path):
             f"为避免误提交拒绝自动提交"
         )
 
-    # 3) fetch origin main，了解 local / origin 的先后关系
-    run(
+    # 3) fetch origin main，了解 local / origin 的先后关系（带重试）
+    run_net(
         ["git", "fetch", "origin", TARGET_BRANCH],
-        cwd=repo_root, timeout=NET_TIMEOUT,
+        cwd=repo_root,
     )
     ahead = int(run(
         ["git", "rev-list", "--count", f"origin/{TARGET_BRANCH}..HEAD"],
@@ -235,10 +355,10 @@ def git_commit_push(repo_root: Path, t_day: datetime.date, session: str = "daily
             f"当前分支为 {cur!r}，拒绝推送（期望 {TARGET_BRANCH}）"
         )
 
-    # git push —— 显式推到 origin/main
-    run(
+    # git push —— 显式推到 origin/main（带重试：killpg 清孤儿 ssh + backoff）
+    run_net(
         ["git", "push", "origin", TARGET_BRANCH],
-        cwd=repo_root, timeout=NET_TIMEOUT,
+        cwd=repo_root,
     )
     log.info(f"✅ 成功推送到 GitHub (origin/{TARGET_BRANCH})")
 
