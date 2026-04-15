@@ -80,6 +80,23 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
 .cf-svg{width:100%;height:auto;display:block;border:1px solid #e2e8f0;
          border-radius:6px;background:#fafbfc}
 
+/* 个股 Baostock 盘后快照（在 stock card 内，cf 区块之下） */
+.sa-wrap{border-top:1px solid #f1f5f9;padding:14px 18px;background:#fcfdfe}
+.sa-title{font-size:11px;font-weight:700;color:#475569;letter-spacing:1px;
+           margin-bottom:10px}
+.sa-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sa-item{background:#fff;border:1px solid #e2e8f0;border-radius:6px;
+          padding:7px 9px;display:flex;flex-direction:column;gap:2px}
+.sa-item .sa-k{font-size:9px;color:#94a3b8;font-weight:500}
+.sa-item b{font-size:12px;font-weight:700;color:#0f172a;
+            font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (max-width:520px){
+  .sa-row{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-width:380px){
+  .sa-row{grid-template-columns:repeat(2,1fr)}
+}
+
 /* 市场复盘（StockAnalysis/Baostock 集成） */
 .ma{background:#fff;border-radius:10px;border:1px solid #e2e8f0;
      padding:14px 18px;margin-bottom:14px;
@@ -150,9 +167,9 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
 <div class="hd">
   <div>
     <div class="ht">A股午报 · 回顾AI</div>
-    <div class="hs">北京时间 2026年4月16日（周四）· 上午盘中（11:30 前后）快照 · 生成于 02:53 BJ · Huigu-AI 自动存档</div>
+    <div class="hs">北京时间 2026年4月16日（周四）· 上午盘中（11:30 前后）快照 · 生成于 03:05 BJ · Huigu-AI 自动存档</div>
   </div>
-  <span class="bdg">📁 20260416_0253</span>
+  <span class="bdg">📁 20260416_0305</span>
 </div>
 
 <div class="sec">主要指数（收盘）</div>
@@ -258,6 +275,20 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" class="cf-svg" preserveAspectRatio="xMidYMid meet"><rect width="560" height="150" fill="#fafbfc" rx="4"/><line x1="6" y1="71.0" x2="554" y2="71.0" stroke="#e2e8f0" stroke-dasharray="2,2"/><rect x="6.0" y="71.0" width="51.2" height="57.0" fill="#16a34a" rx="1"/><rect x="61.2" y="71.0" width="51.2" height="36.1" fill="#16a34a" rx="1"/><rect x="116.4" y="71.0" width="51.2" height="39.3" fill="#16a34a" rx="1"/><rect x="171.6" y="71.0" width="51.2" height="17.8" fill="#16a34a" rx="1"/><rect x="226.8" y="52.7" width="51.2" height="18.3" fill="#dc2626" rx="1"/><rect x="282.0" y="71.0" width="51.2" height="33.0" fill="#16a34a" rx="1"/><rect x="337.2" y="40.3" width="51.2" height="30.7" fill="#dc2626" rx="1"/><rect x="392.4" y="38.6" width="51.2" height="32.4" fill="#dc2626" rx="1"/><rect x="447.6" y="71.0" width="51.2" height="24.3" fill="#16a34a" rx="1"/><rect x="502.8" y="71.0" width="51.2" height="15.5" fill="#16a34a" rx="1"/><text x="31.6" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-01</text><text x="142.0" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-03</text><text x="252.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-08</text><text x="362.8" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-10</text><text x="473.2" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-14</text><text x="528.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-15</text></svg>
       </div>
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      
+      <div class="sa-wrap">
+        <div class="sa-title">📊 Baostock 盘后快照 · 新能源汽车龙头</div>
+        <div class="sa-row">
+          <div class="sa-item"><span class="sa-k">收盘</span><b>103.03</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌</span><b class="dn">▼ -0.76%</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌额</span><b class="dn">-0.79</b></div>
+          <div class="sa-item"><span class="sa-k">MA5</span><b>102.36</b></div>
+          <div class="sa-item"><span class="sa-k">MA10</span><b>101.43</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日高</span><b class="dn">-5.0%</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日低</span><b class="up">+5.7%</b></div>
+        </div>
+      </div>
     </div>
     <div class="sc" style="border-top:3px solid #2563eb">
       <!-- 个股标题行 -->
@@ -316,6 +347,20 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
           <div class="cf-bd-row"><div class="cf-item"><span class="cf-k">超大单</span><span class="dn">-6661万</span></div><div class="cf-item"><span class="cf-k">大单</span><span class="dn">-6454万</span></div><div class="cf-item"><span class="cf-k">中单</span><span class="up">+1268万</span></div><div class="cf-item"><span class="cf-k">小单</span><span class="up">+1.18亿</span></div></div>
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" class="cf-svg" preserveAspectRatio="xMidYMid meet"><rect width="560" height="150" fill="#fafbfc" rx="4"/><line x1="6" y1="71.0" x2="554" y2="71.0" stroke="#e2e8f0" stroke-dasharray="2,2"/><rect x="6.0" y="71.0" width="51.2" height="1.2" fill="#16a34a" rx="1"/><rect x="61.2" y="71.0" width="51.2" height="41.0" fill="#16a34a" rx="1"/><rect x="116.4" y="71.0" width="51.2" height="11.8" fill="#16a34a" rx="1"/><rect x="171.6" y="71.0" width="51.2" height="7.8" fill="#16a34a" rx="1"/><rect x="226.8" y="41.7" width="51.2" height="29.3" fill="#dc2626" rx="1"/><rect x="282.0" y="71.0" width="51.2" height="32.3" fill="#16a34a" rx="1"/><rect x="337.2" y="71.0" width="51.2" height="37.9" fill="#16a34a" rx="1"/><rect x="392.4" y="64.8" width="51.2" height="6.2" fill="#dc2626" rx="1"/><rect x="447.6" y="14.0" width="51.2" height="57.0" fill="#dc2626" rx="1"/><rect x="502.8" y="71.0" width="51.2" height="45.6" fill="#16a34a" rx="1"/><text x="31.6" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-01</text><text x="142.0" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-03</text><text x="252.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-08</text><text x="362.8" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-10</text><text x="473.2" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-14</text><text x="528.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-15</text></svg>
+      </div>
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      
+      <div class="sa-wrap">
+        <div class="sa-title">📊 Baostock 盘后快照 · 半导体封装测试</div>
+        <div class="sa-row">
+          <div class="sa-item"><span class="sa-k">收盘</span><b>12.46</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌</span><b class="dn">▼ -1.81%</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌额</span><b class="dn">-0.23</b></div>
+          <div class="sa-item"><span class="sa-k">MA5</span><b>12.38</b></div>
+          <div class="sa-item"><span class="sa-k">MA10</span><b>12.03</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日高</span><b class="dn">-2.7%</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日低</span><b class="up">+10.3%</b></div>
+        </div>
       </div>
     </div>
     <div class="sc" style="border-top:3px solid #d97706">
@@ -376,6 +421,20 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" class="cf-svg" preserveAspectRatio="xMidYMid meet"><rect width="560" height="150" fill="#fafbfc" rx="4"/><line x1="6" y1="71.0" x2="554" y2="71.0" stroke="#e2e8f0" stroke-dasharray="2,2"/><rect x="6.0" y="61.1" width="51.2" height="9.9" fill="#dc2626" rx="1"/><rect x="61.2" y="71.0" width="51.2" height="44.8" fill="#16a34a" rx="1"/><rect x="116.4" y="71.0" width="51.2" height="42.0" fill="#16a34a" rx="1"/><rect x="171.6" y="71.0" width="51.2" height="31.4" fill="#16a34a" rx="1"/><rect x="226.8" y="14.0" width="51.2" height="57.0" fill="#dc2626" rx="1"/><rect x="282.0" y="71.0" width="51.2" height="43.0" fill="#16a34a" rx="1"/><rect x="337.2" y="32.0" width="51.2" height="39.0" fill="#dc2626" rx="1"/><rect x="392.4" y="71.0" width="51.2" height="7.2" fill="#16a34a" rx="1"/><rect x="447.6" y="71.0" width="51.2" height="17.0" fill="#16a34a" rx="1"/><rect x="502.8" y="71.0" width="51.2" height="21.2" fill="#16a34a" rx="1"/><text x="31.6" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-01</text><text x="142.0" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-03</text><text x="252.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-08</text><text x="362.8" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-10</text><text x="473.2" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-14</text><text x="528.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-15</text></svg>
       </div>
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      
+      <div class="sa-wrap">
+        <div class="sa-title">📊 Baostock 盘后快照 · 网络安全/AI</div>
+        <div class="sa-row">
+          <div class="sa-item"><span class="sa-k">收盘</span><b>10.85</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌</span><b class="dn">▼ -1.27%</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌额</span><b class="dn">-0.14</b></div>
+          <div class="sa-item"><span class="sa-k">MA5</span><b>10.87</b></div>
+          <div class="sa-item"><span class="sa-k">MA10</span><b>10.73</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日高</span><b class="dn">-2.7%</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日低</span><b class="up">+6.1%</b></div>
+        </div>
+      </div>
     </div>
     <div class="sc" style="border-top:3px solid #7c3aed">
       <!-- 个股标题行 -->
@@ -434,6 +493,20 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
           <div class="cf-bd-row"><div class="cf-item"><span class="cf-k">超大单</span><span class="dn">-2994万</span></div><div class="cf-item"><span class="cf-k">大单</span><span class="dn">-9244万</span></div><div class="cf-item"><span class="cf-k">中单</span><span class="dn">-7097万</span></div><div class="cf-item"><span class="cf-k">小单</span><span class="up">+1.93亿</span></div></div>
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" class="cf-svg" preserveAspectRatio="xMidYMid meet"><rect width="560" height="150" fill="#fafbfc" rx="4"/><line x1="6" y1="71.0" x2="554" y2="71.0" stroke="#e2e8f0" stroke-dasharray="2,2"/><rect x="6.0" y="64.6" width="51.2" height="6.4" fill="#dc2626" rx="1"/><rect x="61.2" y="71.0" width="51.2" height="18.4" fill="#16a34a" rx="1"/><rect x="116.4" y="71.0" width="51.2" height="3.9" fill="#16a34a" rx="1"/><rect x="171.6" y="14.0" width="51.2" height="57.0" fill="#dc2626" rx="1"/><rect x="226.8" y="32.1" width="51.2" height="38.9" fill="#dc2626" rx="1"/><rect x="282.0" y="16.4" width="51.2" height="54.6" fill="#dc2626" rx="1"/><rect x="337.2" y="71.0" width="51.2" height="26.9" fill="#16a34a" rx="1"/><rect x="392.4" y="71.0" width="51.2" height="28.8" fill="#16a34a" rx="1"/><rect x="447.6" y="71.0" width="51.2" height="45.4" fill="#16a34a" rx="1"/><rect x="502.8" y="71.0" width="51.2" height="33.0" fill="#16a34a" rx="1"/><text x="31.6" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-01</text><text x="142.0" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-03</text><text x="252.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-08</text><text x="362.8" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-10</text><text x="473.2" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-14</text><text x="528.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-15</text></svg>
+      </div>
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      
+      <div class="sa-wrap">
+        <div class="sa-title">📊 Baostock 盘后快照 · 军工连接器龙头</div>
+        <div class="sa-row">
+          <div class="sa-item"><span class="sa-k">收盘</span><b>35.87</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌</span><b class="dn">▼ -1.75%</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌额</span><b class="dn">-0.64</b></div>
+          <div class="sa-item"><span class="sa-k">MA5</span><b>36.57</b></div>
+          <div class="sa-item"><span class="sa-k">MA10</span><b>35.41</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日高</span><b class="dn">-4.3%</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日低</span><b class="up">+9.5%</b></div>
+        </div>
       </div>
     </div>
     <div class="sc" style="border-top:3px solid #dc2626">
@@ -494,6 +567,20 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" class="cf-svg" preserveAspectRatio="xMidYMid meet"><rect width="560" height="150" fill="#fafbfc" rx="4"/><line x1="6" y1="71.0" x2="554" y2="71.0" stroke="#e2e8f0" stroke-dasharray="2,2"/><rect x="6.0" y="53.5" width="51.2" height="17.5" fill="#dc2626" rx="1"/><rect x="61.2" y="71.0" width="51.2" height="33.7" fill="#16a34a" rx="1"/><rect x="116.4" y="71.0" width="51.2" height="7.2" fill="#16a34a" rx="1"/><rect x="171.6" y="71.0" width="51.2" height="1.0" fill="#16a34a" rx="1"/><rect x="226.8" y="32.5" width="51.2" height="38.5" fill="#dc2626" rx="1"/><rect x="282.0" y="71.0" width="51.2" height="23.4" fill="#16a34a" rx="1"/><rect x="337.2" y="57.3" width="51.2" height="13.7" fill="#dc2626" rx="1"/><rect x="392.4" y="64.0" width="51.2" height="7.0" fill="#dc2626" rx="1"/><rect x="447.6" y="60.9" width="51.2" height="10.1" fill="#dc2626" rx="1"/><rect x="502.8" y="71.0" width="51.2" height="57.0" fill="#16a34a" rx="1"/><text x="31.6" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-01</text><text x="142.0" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-03</text><text x="252.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-08</text><text x="362.8" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-10</text><text x="473.2" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-14</text><text x="528.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-15</text></svg>
       </div>
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      
+      <div class="sa-wrap">
+        <div class="sa-title">📊 Baostock 盘后快照 · AI语音龙头</div>
+        <div class="sa-row">
+          <div class="sa-item"><span class="sa-k">收盘</span><b>47.54</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌</span><b class="dn">▼ -1.63%</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌额</span><b class="dn">-0.79</b></div>
+          <div class="sa-item"><span class="sa-k">MA5</span><b>47.70</b></div>
+          <div class="sa-item"><span class="sa-k">MA10</span><b>47.06</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日高</span><b class="dn">-2.9%</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日低</span><b class="up">+4.8%</b></div>
+        </div>
+      </div>
     </div>
     <div class="sc" style="border-top:3px solid #0891b2">
       <!-- 个股标题行 -->
@@ -553,6 +640,8 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" class="cf-svg" preserveAspectRatio="xMidYMid meet"><rect width="560" height="150" fill="#fafbfc" rx="4"/><line x1="6" y1="71.0" x2="554" y2="71.0" stroke="#e2e8f0" stroke-dasharray="2,2"/><rect x="6.0" y="34.5" width="51.2" height="36.5" fill="#dc2626" rx="1"/><rect x="61.2" y="71.0" width="51.2" height="48.5" fill="#16a34a" rx="1"/><rect x="116.4" y="70.1" width="51.2" height="0.9" fill="#dc2626" rx="1"/><rect x="171.6" y="61.8" width="51.2" height="9.2" fill="#dc2626" rx="1"/><rect x="226.8" y="14.0" width="51.2" height="57.0" fill="#dc2626" rx="1"/><rect x="282.0" y="71.0" width="51.2" height="39.9" fill="#16a34a" rx="1"/><rect x="337.2" y="71.0" width="51.2" height="23.4" fill="#16a34a" rx="1"/><rect x="392.4" y="71.0" width="51.2" height="21.7" fill="#16a34a" rx="1"/><rect x="447.6" y="70.8" width="51.2" height="0.5" fill="#dc2626" rx="1"/><rect x="502.8" y="71.0" width="51.2" height="13.3" fill="#16a34a" rx="1"/><text x="31.6" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-01</text><text x="142.0" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-03</text><text x="252.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-08</text><text x="362.8" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-10</text><text x="473.2" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-14</text><text x="528.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-15</text></svg>
       </div>
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      
     </div>
     <div class="sc" style="border-top:3px solid #db2777">
       <!-- 个股标题行 -->
@@ -612,6 +701,8 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" class="cf-svg" preserveAspectRatio="xMidYMid meet"><rect width="560" height="150" fill="#fafbfc" rx="4"/><line x1="6" y1="71.0" x2="554" y2="71.0" stroke="#e2e8f0" stroke-dasharray="2,2"/><rect x="6.0" y="62.0" width="51.2" height="9.0" fill="#dc2626" rx="1"/><rect x="61.2" y="71.0" width="51.2" height="3.7" fill="#16a34a" rx="1"/><rect x="116.4" y="71.0" width="51.2" height="11.6" fill="#16a34a" rx="1"/><rect x="171.6" y="71.0" width="51.2" height="9.2" fill="#16a34a" rx="1"/><rect x="226.8" y="25.3" width="51.2" height="45.7" fill="#dc2626" rx="1"/><rect x="282.0" y="35.7" width="51.2" height="35.3" fill="#dc2626" rx="1"/><rect x="337.2" y="14.0" width="51.2" height="57.0" fill="#dc2626" rx="1"/><rect x="392.4" y="71.0" width="51.2" height="23.3" fill="#16a34a" rx="1"/><rect x="447.6" y="71.0" width="51.2" height="19.9" fill="#16a34a" rx="1"/><rect x="502.8" y="71.0" width="51.2" height="8.5" fill="#16a34a" rx="1"/><text x="31.6" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-01</text><text x="142.0" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-03</text><text x="252.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-08</text><text x="362.8" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-10</text><text x="473.2" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-14</text><text x="528.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-15</text></svg>
       </div>
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      
     </div>
     <div class="sc" style="border-top:3px solid #475569">
       <!-- 个股标题行 -->
@@ -671,6 +762,8 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" class="cf-svg" preserveAspectRatio="xMidYMid meet"><rect width="560" height="150" fill="#fafbfc" rx="4"/><line x1="6" y1="71.0" x2="554" y2="71.0" stroke="#e2e8f0" stroke-dasharray="2,2"/><rect x="6.0" y="49.9" width="51.2" height="21.1" fill="#dc2626" rx="1"/><rect x="61.2" y="71.0" width="51.2" height="19.3" fill="#16a34a" rx="1"/><rect x="116.4" y="67.4" width="51.2" height="3.6" fill="#dc2626" rx="1"/><rect x="171.6" y="48.5" width="51.2" height="22.5" fill="#dc2626" rx="1"/><rect x="226.8" y="42.2" width="51.2" height="28.8" fill="#dc2626" rx="1"/><rect x="282.0" y="34.9" width="51.2" height="36.1" fill="#dc2626" rx="1"/><rect x="337.2" y="46.8" width="51.2" height="24.2" fill="#dc2626" rx="1"/><rect x="392.4" y="71.0" width="51.2" height="23.7" fill="#16a34a" rx="1"/><rect x="447.6" y="71.0" width="51.2" height="57.0" fill="#16a34a" rx="1"/><rect x="502.8" y="54.3" width="51.2" height="16.7" fill="#dc2626" rx="1"/><text x="31.6" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-01</text><text x="142.0" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-03</text><text x="252.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-08</text><text x="362.8" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-10</text><text x="473.2" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-14</text><text x="528.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-15</text></svg>
       </div>
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      
     </div>
     <div class="sc" style="border-top:3px solid #ca8a04">
       <!-- 个股标题行 -->
@@ -730,13 +823,15 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" class="cf-svg" preserveAspectRatio="xMidYMid meet"><rect width="560" height="150" fill="#fafbfc" rx="4"/><line x1="6" y1="71.0" x2="554" y2="71.0" stroke="#e2e8f0" stroke-dasharray="2,2"/><rect x="6.0" y="67.9" width="51.2" height="3.1" fill="#dc2626" rx="1"/><rect x="61.2" y="71.0" width="51.2" height="16.6" fill="#16a34a" rx="1"/><rect x="116.4" y="71.0" width="51.2" height="14.2" fill="#16a34a" rx="1"/><rect x="171.6" y="71.0" width="51.2" height="5.1" fill="#16a34a" rx="1"/><rect x="226.8" y="66.2" width="51.2" height="4.8" fill="#dc2626" rx="1"/><rect x="282.0" y="71.0" width="51.2" height="4.2" fill="#16a34a" rx="1"/><rect x="337.2" y="71.0" width="51.2" height="0.7" fill="#16a34a" rx="1"/><rect x="392.4" y="14.0" width="51.2" height="57.0" fill="#dc2626" rx="1"/><rect x="447.6" y="71.0" width="51.2" height="24.9" fill="#16a34a" rx="1"/><rect x="502.8" y="71.0" width="51.2" height="2.9" fill="#16a34a" rx="1"/><text x="31.6" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-01</text><text x="142.0" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-03</text><text x="252.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-08</text><text x="362.8" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-10</text><text x="473.2" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-14</text><text x="528.4" y="144" font-size="9" fill="#94a3b8" text-anchor="middle">04-15</text></svg>
       </div>
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      
     </div>
 
 <div class="sec">股吧大V · 今日洞察</div>
 <div class="guba-wrap">
   <div class="guba-hd">
     📋 股吧大V · 今日洞察
-    <span class="guba-meta">来源：延安路老猫K、马上钧看市 · 2026-04-16 02:54</span>
+    <span class="guba-meta">来源：延安路老猫K、马上钧看市 · 2026-04-16 03:05</span>
     <span class="guba-warn">⚠ 个人观点，不构成投资建议</span>
   </div>
   
@@ -762,7 +857,7 @@ body{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;colo
 <div class="news"><ul><li>当日要闻抓取失败，请访问财经网站查看</li></ul></div>
 
 <div class="disc">
-  ⚠ 本报告由 Huigu-AI 自动生成（午间场次 · 02:53 BJ），数据来自新浪财经 / 同花顺，仅供个人存档参考，不构成投资建议。<br>
+  ⚠ 本报告由 Huigu-AI 自动生成（午间场次 · 03:05 BJ），数据来自新浪财经 / 同花顺，仅供个人存档参考，不构成投资建议。<br>
   图表为上午休市附近的盘中快照，已离线内嵌，无需网络即可查看 · 北京时间（UTC+8）
 </div>
 
