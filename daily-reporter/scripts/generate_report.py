@@ -277,12 +277,20 @@ def fetch_stock_data(stock: dict) -> dict:
         log(f"  新浪行情 {code} 失败: {e}")
 
     # 同花顺涨跌幅校验
+    # 页面里存在多段 JSON/非 JSON 片段，原来 non-greedy 正则会因为正文
+    # 里其它 `"item1":"..."}]` 字段被匹到更长的 slice，导致 json.loads
+    # 报 "Extra data"。用 JSONDecoder.raw_decode 容忍尾随内容。
     try:
         url  = f"http://stockpage.10jqka.com.cn/{code}/"
         text = fetch_text(url, referer="http://stockpage.10jqka.com.cn/")
-        arr_match = re.search(r'(\[\{"date":"\d+".*?"item1":"[\d.\-]+"\}\])', text, re.DOTALL)
-        if arr_match:
-            arr = json.loads(arr_match.group(1))
+        # 找到以 [{"date":"..." 开头的第一段，用 raw_decode 只解析首个
+        # 合法 JSON 值，忽略后面多余的字符
+        start = re.search(r'\[\{"date":"\d+"', text)
+        if start:
+            try:
+                arr, _end = json.JSONDecoder().raw_decode(text[start.start():])
+            except json.JSONDecodeError:
+                arr = None
             if arr:
                 latest = arr[-1]
                 result["ths_date"]    = latest.get("date", "")
@@ -349,31 +357,51 @@ def fetch_capital_flow(stock: dict, lmt: int = 10) -> dict:
         days = []
         for line in klines:
             parts = line.split(",")
-            if len(parts) < 13:
+            # 东方财富 2026 年后把 fflow/kline/get 响应简化为 6 列：
+            #   date, main, small, medium, large, xlarge
+            # 老格式（13 列）额外包含 5 档占比 + 收盘价 + 涨跌幅，API 已
+            # 不再返回（即便 fields2 里声明 f57~f63 也一样）。门槛 < 6
+            # 跳过损坏行；位置 ≥ 6 的旧字段用 None 标记"API 未提供"。
+            if len(parts) < 6:
                 continue
-            def _f(i, typ=float):
+
+            def _num(i, default=0.0):
+                """取第 i 列并转 float；越界或不可解析返回 default。"""
+                if i >= len(parts):
+                    return default
                 try:
-                    return typ(parts[i])
-                except Exception:
-                    return 0.0 if typ is float else 0
+                    return float(parts[i])
+                except (ValueError, TypeError):
+                    return default
+
+            def _opt(i):
+                """取可选字段：字段不存在返回 None（区分于"存在且为 0"）。"""
+                if i >= len(parts):
+                    return None
+                try:
+                    return float(parts[i])
+                except (ValueError, TypeError):
+                    return None
+
             days.append({
-                "date":      parts[0],
-                "main":      _f(1),   # 主力净流入（元）
-                "small":     _f(2),
-                "medium":    _f(3),
-                "large":     _f(4),
-                "xlarge":    _f(5),
-                "main_pct":  _f(6),
-                "small_pct": _f(7),
-                "medium_pct":_f(8),
-                "large_pct": _f(9),
-                "xlarge_pct":_f(10),
-                "close":     _f(11),
-                "chg_pct":   _f(12),
+                "date":       parts[0],
+                "main":       _num(1),   # 主力净流入（元）
+                "small":      _num(2),
+                "medium":     _num(3),
+                "large":      _num(4),
+                "xlarge":     _num(5),
+                # 以下字段仅在"老 13 列"格式存在时才填充
+                "main_pct":   _opt(6),
+                "small_pct":  _opt(7),
+                "medium_pct": _opt(8),
+                "large_pct":  _opt(9),
+                "xlarge_pct": _opt(10),
+                "close":      _opt(11),
+                "chg_pct":    _opt(12),
             })
         if not days:
             raise ValueError(
-                f"所有 klines 条目字段数不足 13 · 样本 0: {klines[0][:200] if klines else ''}"
+                f"所有 klines 条目字段数不足 6 · 样本 0: {klines[0][:200] if klines else ''}"
             )
         result["days"]  = days
         result["today"] = days[-1]
@@ -429,6 +457,14 @@ def render_capital_flow(cf: dict) -> str:
     today = cf["today"]
     sum5  = cf["sum5"]
     sum10 = cf["sum10"]
+
+    # 主力净流入占比：2026 年后东财新格式不再返回 main_pct（None）
+    # 老格式才会给出数值 —— 只在数值存在时显示徽章，否则整个占比块隐藏
+    main_pct = today.get("main_pct")
+    pct_html = (
+        f'<span class="cf-pct">{main_pct:+.2f}%</span>'
+        if main_pct is not None else ""
+    )
 
     # 5 档资金拆解（今日）
     breakdown = [
@@ -494,7 +530,7 @@ def render_capital_flow(cf: dict) -> str:
           <div class="cf-kpi">
             <div class="cf-label">今日主力净流入</div>
             <div class="cf-value">{_cf_amount_span(today['main'])}
-              <span class="cf-pct">{today['main_pct']:+.2f}%</span></div>
+              {pct_html}</div>
           </div>
           <div class="cf-kpi">
             <div class="cf-label">近 5 日合计</div>
