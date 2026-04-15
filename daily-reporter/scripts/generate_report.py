@@ -311,23 +311,41 @@ def fetch_capital_flow(stock: dict, lmt: int = 10) -> dict:
     code   = stock["code"]
     market = stock["market"]
     secid  = ("1" if market == "sh" else "0") + "." + code
+    # 关键参数说明：
+    #   ut=b2884a393a59ad64002292a3e90d46a5
+    #     东方财富客户端通用 token，公开值，akshare / efinance / adata 等
+    #     开源库均有记载。缺省时该端点仍返回 rc=0，但 data.klines 为空，
+    #     与本项目此前见到的 "klines 为空" 症状完全吻合。
+    #   _={ts} 缓存破坏，避免 CDN 返回过期响应
+    ts_ms = int(time.time() * 1000)
     url = (
-        "http://push2his.eastmoney.com/api/qt/stock/fflow/kline/get"
+        "https://push2his.eastmoney.com/api/qt/stock/fflow/kline/get"
         f"?lmt={lmt}&klt=101"
         "&fields1=f1,f2,f3,f7"
         "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65"
+        "&ut=b2884a393a59ad64002292a3e90d46a5"
         f"&secid={secid}"
+        f"&_={ts_ms}"
     )
     result = {"ok": False, "name": stock["name"], "days": [], "error": ""}
     try:
-        raw  = fetch_text(url, timeout=12, referer="https://data.eastmoney.com/")
+        raw  = fetch_text(url, timeout=15, referer="https://data.eastmoney.com/")
         data = json.loads(raw)
         if data.get("rc") not in (0, None):
-            raise ValueError(f"接口返回 rc={data.get('rc')} em={data.get('em','')}")
+            raise ValueError(
+                f"接口返回 rc={data.get('rc')} em={data.get('em','')}"
+            )
         payload = data.get("data") or {}
         if payload.get("name"):
             result["name"] = payload["name"]
         klines = payload.get("klines") or []
+        if not klines:
+            # 留一条诊断线索：打印原始响应前 300 字，下次若还复发就能
+            # 直接从日志看到 API 究竟返回了什么（比"klines 为空"信息量高）
+            snippet = raw[:300].replace("\n", " ").replace("\r", " ")
+            raise ValueError(
+                f"klines 为空 · secid={secid} · resp 前 300 字: {snippet}"
+            )
         days = []
         for line in klines:
             parts = line.split(",")
@@ -354,7 +372,9 @@ def fetch_capital_flow(stock: dict, lmt: int = 10) -> dict:
                 "chg_pct":   _f(12),
             })
         if not days:
-            raise ValueError("klines 为空")
+            raise ValueError(
+                f"所有 klines 条目字段数不足 13 · 样本 0: {klines[0][:200] if klines else ''}"
+            )
         result["days"]  = days
         result["today"] = days[-1]
         def _sum(n, key):
