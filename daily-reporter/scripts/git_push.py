@@ -335,10 +335,10 @@ def git_commit_push(repo_root: Path, t_day: datetime.date, session: str = "daily
     meta       = SESSIONS.get(session, SESSIONS["daily"])
     title_name = meta["title"]
 
-    # 从被提交文件名中解析实际生成时分（astock_YYYYMMDD_HHMM.md）
+    # 从被提交文件名中解析实际生成时分（astock_YYYYMMDD_HHMM.html）
     hh_mm_list = []
     for p in staged:
-        m = re.search(r"_(\d{2})(\d{2})\.md$", p)
+        m = re.search(r"_(\d{2})(\d{2})\.html$", p)
         if m:
             hh_mm_list.append(f"{m.group(1)}:{m.group(2)}")
     hh_mm_tag = " / ".join(sorted(set(hh_mm_list))) if hh_mm_list else ""

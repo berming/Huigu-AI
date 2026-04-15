@@ -1017,16 +1017,16 @@ def render_market_analysis(ma: dict) -> str:
 # ─────────────────────────────────────────────────────────
 
 def generate_index_html(report_dir: Path, out_path: Path):
-    """扫描 report_dir 下的 astock_YYYYMMDD_HHMM.md，按日期倒序 + 场次
+    """扫描 report_dir 下的 astock_YYYYMMDD_HHMM.html，按日期倒序 + 场次
     生成移动优先的索引页，写到 out_path（通常是 repo 根 index.html）。
 
     链接使用相对路径 daily-reporter/reports/... ，既适用 GitHub Pages
     （https://user.github.io/repo/），也适用本地 file:// 打开。"""
     WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-    pattern  = re.compile(r'^astock_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\.md$')
+    pattern  = re.compile(r'^astock_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\.html$')
 
     entries = []
-    for p in sorted(report_dir.glob("astock_*.md")):
+    for p in sorted(report_dir.glob("astock_*.html")):
         m = pattern.match(p.name)
         if not m:
             continue
@@ -1207,13 +1207,13 @@ def main(session: str = None):
     gen_dt      = get_bj_now()
     hhmm_now    = gen_dt.strftime("%H%M")
     file_date   = t_day.strftime("%Y%m%d")
-    report_path = REPORT_DIR / f"astock_{file_date}_{hhmm_now}.md"
+    report_path = REPORT_DIR / f"astock_{file_date}_{hhmm_now}.html"
     log(f"输出文件 = {report_path.name}（按生成时刻 {gen_dt.strftime('%H:%M')} 命名）")
 
     # 覆盖语义：清掉同一交易日、同场次时间窗内已有的旧报告，再写入新时刻文件
     start_h, end_h = meta["window"]
-    for p in sorted(REPORT_DIR.glob(f"astock_{file_date}_*.md")):
-        m = re.search(r"_(\d{4})\.md$", p.name)
+    for p in sorted(REPORT_DIR.glob(f"astock_{file_date}_*.html")):
+        m = re.search(r"_(\d{4})\.html$", p.name)
         if not m:
             continue
         hh = int(m.group(1)[:2])
