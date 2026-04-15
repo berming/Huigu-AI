@@ -52,6 +52,10 @@ log = logging.getLogger(__name__)
 
 TARGET_BRANCH    = "main"
 REPORTS_PATHSPEC = "daily-reporter/reports"     # 相对主仓库根的路径
+ROOT_INDEX_FILE  = "index.html"                  # GitHub Pages 首页
+
+# 自动生成、允许被本脚本 commit 的根目录文件（只接受精确匹配的文件名）
+AUTO_ROOT_FILES  = (ROOT_INDEX_FILE,)
 
 # ── 命令超时（秒） ─────────────────────────────────────────
 # 本地 git 命令 60s 足够。
@@ -219,7 +223,8 @@ def ensure_on_main_clean(repo_root: Path):
             f"下次在 main 分支上运行时会被继续处理）"
         )
 
-    # 2) 工作区在 daily-reporter/reports/ 以外不能有未提交改动
+    # 2) 工作区在 "daily-reporter/reports/ + 允许的根目录自动文件" 以外
+    #    不能有未提交改动
     status = run(
         ["git", "status", "--porcelain"], cwd=repo_root,
     ).stdout
@@ -234,14 +239,18 @@ def ensure_on_main_clean(repo_root: Path):
             path = path.split(" -> ", 1)[1]
         # 去掉可能的引号
         path = path.strip('"')
-        if not path.startswith(REPORTS_PATHSPEC):
-            unrelated.append(path)
+        # 允许：daily-reporter/reports/... 或 根目录 index.html
+        if path.startswith(REPORTS_PATHSPEC):
+            continue
+        if path in AUTO_ROOT_FILES:
+            continue
+        unrelated.append(path)
     if unrelated:
         preview = ", ".join(unrelated[:3])
         more = f" (+{len(unrelated)-3} more)" if len(unrelated) > 3 else ""
         raise RuntimeError(
-            f"工作区存在 {REPORTS_PATHSPEC}/ 以外的未提交改动：{preview}{more}，"
-            f"为避免误提交拒绝自动提交"
+            f"工作区存在 {REPORTS_PATHSPEC}/ 与 {list(AUTO_ROOT_FILES)} "
+            f"以外的未提交改动：{preview}{more}，为避免误提交拒绝自动提交"
         )
 
     # 3) fetch origin main，了解 local / origin 的先后关系（带重试）
@@ -277,33 +286,41 @@ def ensure_on_main_clean(repo_root: Path):
 
 
 def git_commit_push(repo_root: Path, t_day: datetime.date, session: str = "daily"):
-    """在主工作区中 stage + commit + push `daily-reporter/reports/`。"""
-    # Stage 所有 reports 下的变化（新建/修改/删除）
+    """在主工作区中 stage + commit + push `daily-reporter/reports/` 以及
+    GitHub Pages 首页 `index.html`。"""
+    # 构建 pathspec 列表：永远包含 reports/，若 index.html 已存在则一起 stage
+    pathspecs = [REPORTS_PATHSPEC]
+    if (repo_root / ROOT_INDEX_FILE).exists():
+        pathspecs.append(ROOT_INDEX_FILE)
+
+    # Stage 所有相关路径下的变化（新建/修改/删除）
     run(
-        ["git", "add", "-A", "--", REPORTS_PATHSPEC],
+        ["git", "add", "-A", "--", *pathspecs],
         cwd=repo_root,
     )
 
-    # 查看 staged 内容；为空就直接返回（本次没有新报告）
+    # 查看 staged 内容；为空就直接返回（本次没有新报告 / 索引）
     staged = run(
         ["git", "diff", "--cached", "--name-only"],
         cwd=repo_root,
     ).stdout.strip().splitlines()
 
     if not staged:
-        log.info("没有新报告变动，跳过 commit")
+        log.info("没有新报告 / 索引变动，跳过 commit")
         return
 
-    # 安全兜底：确认所有 staged 都在 reports 路径下
-    bad = [p for p in staged if not p.startswith(REPORTS_PATHSPEC)]
+    # 安全兜底：确认所有 staged 都在允许白名单内（reports/ 或 index.html）
+    def _is_allowed(p: str) -> bool:
+        return p.startswith(REPORTS_PATHSPEC) or p in AUTO_ROOT_FILES
+    bad = [p for p in staged if not _is_allowed(p)]
     if bad:
         # 撤销 stage，避免污染用户工作区
         run(
-            ["git", "reset", "HEAD", "--", REPORTS_PATHSPEC],
+            ["git", "reset", "HEAD", "--", *pathspecs],
             cwd=repo_root, check=False,
         )
         raise RuntimeError(
-            f"staged 中发现非 reports 路径：{bad[:3]}，已 reset 回工作区"
+            f"staged 中发现白名单以外的路径：{bad[:3]}，已 reset 回工作区"
         )
 
     log.info(f"staged {len(staged)} 个文件：")
