@@ -631,6 +631,8 @@ def generate_html(t_day: datetime.date, indices: dict,
       </div>"""
 
     # ── 个股卡片（单列全宽） ───────────────────────────────
+    # 从 market_analysis 抽出按 code 索引的个股盘后快照映射（可能为空）
+    ma_stocks_map = (market_analysis or {}).get("stocks") or {}
     stock_cards = ""
     for s in stocks:
         code      = s["code"]
@@ -687,6 +689,8 @@ def generate_html(t_day: datetime.date, indices: dict,
       </div>
       <!-- 主力资金追踪（参考同花顺 /funds/ 页面口径） -->
       {render_capital_flow(s.get("cf"))}
+      <!-- Baostock 盘后快照（来自 StockAnalysis/ md，仅对已收录的个股显示） -->
+      {render_stock_analysis(code, ma_stocks_map)}
     </div>"""
 
     # ── 要闻列表 ──────────────────────────────────────────
@@ -775,6 +779,23 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 .cf-k{{font-size:9px;color:#64748b}}
 .cf-svg{{width:100%;height:auto;display:block;border:1px solid #e2e8f0;
          border-radius:6px;background:#fafbfc}}
+
+/* 个股 Baostock 盘后快照（在 stock card 内，cf 区块之下） */
+.sa-wrap{{border-top:1px solid #f1f5f9;padding:14px 18px;background:#fcfdfe}}
+.sa-title{{font-size:11px;font-weight:700;color:#475569;letter-spacing:1px;
+           margin-bottom:10px}}
+.sa-row{{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}}
+.sa-item{{background:#fff;border:1px solid #e2e8f0;border-radius:6px;
+          padding:7px 9px;display:flex;flex-direction:column;gap:2px}}
+.sa-item .sa-k{{font-size:9px;color:#94a3b8;font-weight:500}}
+.sa-item b{{font-size:12px;font-weight:700;color:#0f172a;
+            font-family:ui-monospace,SFMono-Regular,Menlo,monospace}}
+@media (max-width:520px){{
+  .sa-row{{grid-template-columns:repeat(3,1fr)}}
+}}
+@media (max-width:380px){{
+  .sa-row{{grid-template-columns:repeat(2,1fr)}}
+}}
 
 /* 市场复盘（StockAnalysis/Baostock 集成） */
 .ma{{background:#fff;border-radius:10px;border:1px solid #e2e8f0;
@@ -901,6 +922,7 @@ def _parse_market_md(text: str, date_str: str, session: str, filename: str) -> d
         "pane":        [],                # 盘面特征 bullets
         "summary":     "",                # 综合评述 段落
         "trend":       [],                # 规律及趋势分析 bullets
+        "stocks":      {},                # 自选个股表 { code -> row dict }
     }
     def _first(pattern, flags=0):
         m = re.search(pattern, text, flags)
@@ -941,7 +963,101 @@ def _parse_market_md(text: str, date_str: str, session: str, filename: str) -> d
         s = re.sub(r'\s+', ' ', s).strip()
         result["summary"] = s
 
+    # 自选个股动态表：提取成 {code -> row} 便于按股票 code 索引
+    result["stocks"] = _parse_stock_table(text)
+
     return result
+
+
+def _parse_stock_table(text: str) -> dict:
+    """从 '## 三、自选个股动态' 章节里抽取个股表格，返回
+    {code: {name, business, close, change, change_amt, ma5, ma10,
+            dist_high, dist_low}}。
+
+    code 被规范化为 6 位数字（"sz.002594" → "002594"），方便与本项目
+    STOCKS 中的 code 字段直接匹配。"""
+    section_m = re.search(
+        r'## 三、自选个股动态\s*\n(.*?)(?=\n## |\Z)',
+        text, re.DOTALL,
+    )
+    if not section_m:
+        return {}
+
+    rows: dict = {}
+    for line in section_m.group(1).splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        # 去掉首尾的 |，按 | 切，去空白
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 10:
+            continue
+        # 跳过表头（含"股票""代码"字样）和分隔行（都是 - 或空）
+        if "股票" in cells[0] and "代码" in cells[1]:
+            continue
+        if all(set(c) <= set("- ") for c in cells):
+            continue
+
+        name, code_raw, biz, close, chg, chg_amt, ma5, ma10, dh, dl = cells[:10]
+        # 规范化代码：去掉 sz. / sh. 前缀
+        code = re.sub(r'^(sz|sh)\.', '', code_raw, flags=re.IGNORECASE)
+        rows[code] = {
+            "name":       name,
+            "business":   biz,
+            "close":      close,
+            "change":     chg,          # 带 ▲/▼ 前缀
+            "change_amt": chg_amt,
+            "ma5":        ma5,
+            "ma10":       ma10,
+            "dist_high":  dh,           # 距 20 日高点（通常负值）
+            "dist_low":   dl,           # 距 20 日低点（通常正值）
+        }
+    return rows
+
+
+def _sa_signed_cls(s: str) -> str:
+    """根据带符号/箭头的字符串判定 A 股配色（涨=up=红，跌=dn=绿）。
+    无法解析返回 'nt'。"""
+    if not s:
+        return "nt"
+    cleaned = s.replace("▲", "").replace("▼", "").replace("%", "").strip()
+    try:
+        v = float(cleaned)
+    except (ValueError, TypeError):
+        return "nt"
+    if v > 0:
+        return "up"
+    if v < 0:
+        return "dn"
+    return "nt"
+
+
+def render_stock_analysis(code: str, stocks_map: dict) -> str:
+    """渲染 stock card 底部的「Baostock 盘后快照」块。
+    stocks_map 为 market_analysis["stocks"]；没有命中返回空串。"""
+    if not stocks_map:
+        return ""
+    row = stocks_map.get(code)
+    if not row:
+        return ""
+
+    chg_cls = _sa_signed_cls(row.get("change", ""))
+    dh_cls  = _sa_signed_cls(row.get("dist_high", ""))
+    dl_cls  = _sa_signed_cls(row.get("dist_low", ""))
+
+    return f"""
+      <div class="sa-wrap">
+        <div class="sa-title">📊 Baostock 盘后快照 · {row["business"]}</div>
+        <div class="sa-row">
+          <div class="sa-item"><span class="sa-k">收盘</span><b>{row["close"]}</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌</span><b class="{chg_cls}">{row["change"]}</b></div>
+          <div class="sa-item"><span class="sa-k">涨跌额</span><b class="{chg_cls}">{row["change_amt"]}</b></div>
+          <div class="sa-item"><span class="sa-k">MA5</span><b>{row["ma5"]}</b></div>
+          <div class="sa-item"><span class="sa-k">MA10</span><b>{row["ma10"]}</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日高</span><b class="{dh_cls}">{row["dist_high"]}</b></div>
+          <div class="sa-item"><span class="sa-k">距 20 日低</span><b class="{dl_cls}">{row["dist_low"]}</b></div>
+        </div>
+      </div>"""
 
 
 def render_market_analysis(ma: dict) -> str:
