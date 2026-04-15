@@ -493,7 +493,8 @@ def render_capital_flow(cf: dict) -> str:
         x = PAD_L + i * (bar_w + gap)
         v = d["main"]
         h = (abs(v) / max_abs) * (plot_h / 2)
-        color = "#16a34a" if v > 0 else ("#dc2626" if v < 0 else "#cbd5e1")
+        # A股红涨绿跌：主力净流入 > 0 用红，< 0 用绿
+        color = "#dc2626" if v > 0 else ("#16a34a" if v < 0 else "#cbd5e1")
         if v >= 0:
             y, rect_h = mid_y - h, h
         else:
@@ -583,7 +584,8 @@ def generate_html(t_day: datetime.date, indices: dict,
                   stocks: list, news: list,
                   guba_html: str = "",
                   session: str = "daily",
-                  gen_dt: datetime.datetime = None) -> str:
+                  gen_dt: datetime.datetime = None,
+                  market_analysis: dict = None) -> str:
     meta = SESSIONS[session]
     title_name = meta["title"]   # A股午报 / A股日报
     slot_name  = meta["slot"]    # 午间 / 每日
@@ -600,10 +602,13 @@ def generate_html(t_day: datetime.date, indices: dict,
     file_date  = t_day.strftime("%Y%m%d")
     file_badge = f"{file_date}_{hhmm_now}"
     guba_block     = guba_html if guba_html else ""
-    guba_css_block = GUBA_CSS if guba_html else "" 
+    guba_css_block = GUBA_CSS if guba_html else ""
     # 插入股吧区块标题
     if guba_block:
         guba_block = '<div class="sec">股吧大V · 今日洞察</div>\n' + guba_block
+
+    # 市场复盘章节（来自 StockAnalysis/ 最新 md，可能为空）
+    market_analysis_block = render_market_analysis(market_analysis)
 
     # ── 指数格 ────────────────────────────────────────────
     idx_map = [
@@ -712,7 +717,8 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
       margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}}
 
 /* 颜色 */
-.up{{color:#16a34a}}.dn{{color:#dc2626}}.nt{{color:#64748b}}
+/* 颜色（A股红涨绿跌） */
+.up{{color:#dc2626}}.dn{{color:#16a34a}}.nt{{color:#64748b}}
 
 /* 指数格 */
 .idx-row{{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:8px}}
@@ -770,6 +776,33 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 .cf-svg{{width:100%;height:auto;display:block;border:1px solid #e2e8f0;
          border-radius:6px;background:#fafbfc}}
 
+/* 市场复盘（StockAnalysis/Baostock 集成） */
+.ma{{background:#fff;border-radius:10px;border:1px solid #e2e8f0;
+     padding:14px 18px;margin-bottom:14px;
+     box-shadow:0 1px 4px rgba(0,0,0,.04)}}
+.ma-head{{display:flex;align-items:flex-start;justify-content:space-between;
+          gap:10px;flex-wrap:wrap;padding-bottom:10px;
+          border-bottom:1px solid #f1f5f9;margin-bottom:10px}}
+.ma-title{{font-size:14px;font-weight:700;color:#0f172a}}
+.ma-when{{font-size:11px;color:#94a3b8;font-weight:500;margin-left:4px}}
+.ma-sent{{display:inline-block;padding:3px 10px;border-radius:14px;
+          font-size:10px;font-weight:600;white-space:nowrap}}
+.ma-bull{{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}}
+.ma-bear{{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}}
+.ma-neut{{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}}
+.ma-meta{{display:flex;gap:14px;font-size:11px;color:#64748b;
+          flex-wrap:wrap;margin-bottom:10px}}
+.ma-meta b{{color:#0f172a;font-weight:700}}
+.ma-sub{{font-size:10px;font-weight:700;color:#64748b;
+         letter-spacing:1.5px;margin:10px 0 6px}}
+.ma-list{{padding-left:18px;margin:0}}
+.ma-list li{{font-size:12px;color:#475569;line-height:1.8;margin:2px 0}}
+.ma-para{{font-size:12px;color:#475569;line-height:1.8}}
+.ma-src{{font-size:10px;color:#94a3b8;margin-top:10px;
+         padding-top:8px;border-top:1px dashed #f1f5f9;text-align:right}}
+.ma-src code{{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+              background:#f8fafc;padding:1px 6px;border-radius:3px}}
+
 /* 要闻 */
 .news{{background:#fff;border-radius:10px;border:1px solid #e2e8f0;padding:14px 18px}}
 .news ul{{padding-left:18px}}
@@ -796,7 +829,7 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 <div class="sec">主要指数（收盘）</div>
 <div class="idx-row">{idx_cells}
 </div>
-
+{market_analysis_block}
 <div class="sec">个股行情 · 分时图 + 日K线快照（离线存档）</div>
 {stock_cards}
 
@@ -812,6 +845,172 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 </div>
 </body>
 </html>"""
+
+# ─────────────────────────────────────────────────────────
+# StockAnalysis 市场日报集成
+#
+# StockAnalysis/ 是同仓库内另一个作者（灵侠）的项目，基于 Baostock
+# 每日 3 次（早 08:30 / 午 12:30 / 晚 19:30）生成 A股市场行情 MD
+# 报告 stock_report_YYYYMMDD_{早,午,晚}.md 。我们在本报告生成时拉取
+# **最新可用**的一份，解析关键字段（情绪 / 广度 / 盘面特征 / 综合
+# 评述），渲染为一个独立章节，给我们的报告补充宏观市场视角。
+#
+# 时效：我们的午报 12:00 运行时，StockAnalysis 午场 12:30 尚未出，
+# 此时最近的 MD 是前一日 晚 或 当日 早。这是正常现象，以"最新可
+# 用"为准，源文件名显示在章节底部方便追踪。
+# ─────────────────────────────────────────────────────────
+
+def load_latest_market_analysis(repo_root: Path):
+    """扫描 repo_root/StockAnalysis/ 找最新的 stock_report_*.md 并解析。
+    未找到 / 目录不存在 / 解析失败 → 返回 None（调用方跳过渲染）。"""
+    sa_dir = repo_root / "StockAnalysis"
+    if not sa_dir.is_dir():
+        return None
+    pattern = re.compile(r'^stock_report_(\d{8})_([早午晚])\.md$')
+    sess_rank = {"早": 0, "午": 1, "晚": 2}
+    candidates = []
+    for p in sa_dir.glob("stock_report_*.md"):
+        m = pattern.match(p.name)
+        if not m:
+            continue
+        date_str, session = m.groups()
+        candidates.append((date_str, sess_rank[session], session, p))
+    if not candidates:
+        return None
+    # 排序：日期升序，同一天内 session 升序（早<午<晚），取最后
+    candidates.sort()
+    date_str, _, session, path = candidates[-1]
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception as e:
+        log(f"⚠ StockAnalysis 读取失败 {path.name}: {e}")
+        return None
+    return _parse_market_md(text, date_str, session, path.name)
+
+
+def _parse_market_md(text: str, date_str: str, session: str, filename: str) -> dict:
+    """从 StockAnalysis md 原文抽取关键字段。"""
+    result = {
+        "filename":    filename,
+        "date":        date_str,          # YYYYMMDD
+        "session":     session,           # 早 / 午 / 晚
+        "sentiment":   "",
+        "breadth":     "",
+        "avg_change":  "",
+        "total_volume":"",
+        "pane":        [],                # 盘面特征 bullets
+        "summary":     "",                # 综合评述 段落
+        "trend":       [],                # 规律及趋势分析 bullets
+    }
+    def _first(pattern, flags=0):
+        m = re.search(pattern, text, flags)
+        return m.group(1).strip() if m else ""
+
+    result["sentiment"]    = _first(r'\*\*市场情绪：\*\*\s*([^\n]+)')
+    result["breadth"]      = _first(r'\*\*市场广度：\*\*\s*([^\n]+)')
+    result["avg_change"]   = _first(r'\*\*平均涨跌幅：\*\*\s*([^\n]+)')
+    result["total_volume"] = _first(r'\*\*合计成交额：\*\*\s*([^\n]+)')
+
+    def _bullets(section_pat):
+        m = re.search(section_pat + r'\s*\n+(.*?)(?=\n## |\n### |\Z)',
+                      text, re.DOTALL)
+        if not m:
+            return []
+        block = m.group(1)
+        bullets = re.findall(r'^- (.+?)(?=\n-|\n\n|\Z)', block,
+                             re.MULTILINE | re.DOTALL)
+        out = []
+        for b in bullets:
+            # 规整化空白 + 去掉 **bold** 标记
+            b = re.sub(r'\*\*(.+?)\*\*', r'\1', b)
+            b = re.sub(r'\s+', ' ', b).strip()
+            if b:
+                out.append(b)
+        return out
+
+    result["pane"]  = _bullets(r'### 盘面特征')
+    result["trend"] = _bullets(r'## 四、规律及趋势分析')
+
+    summary_m = re.search(
+        r'## 五、综合评述\s*\n+(.*?)(?=\n---|\n\*🤖|\n## |\Z)',
+        text, re.DOTALL,
+    )
+    if summary_m:
+        s = summary_m.group(1).strip()
+        s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)
+        s = re.sub(r'\s+', ' ', s).strip()
+        result["summary"] = s
+
+    return result
+
+
+def render_market_analysis(ma: dict) -> str:
+    """生成插入本报告的「市场复盘」章节。ma 为 load_latest_market_analysis
+    的返回值；None 或缺关键字段 → 返回空串。"""
+    if not ma:
+        return ""
+    has_any = any([
+        ma.get("sentiment"), ma.get("breadth"),
+        ma.get("avg_change"), ma.get("pane"), ma.get("summary"),
+    ])
+    if not has_any:
+        return ""
+
+    # 情绪徽章分类（A股红涨绿跌）
+    sent = ma.get("sentiment") or ""
+    if "多" in sent or "强" in sent:
+        sent_cls = "ma-bull"     # 红
+    elif "空" in sent or "弱" in sent:
+        sent_cls = "ma-bear"     # 绿
+    else:
+        sent_cls = "ma-neut"
+
+    # 日期显示
+    d = ma["date"]
+    date_disp = f"{d[:4]}-{d[4:6]}-{d[6:]}" if len(d) == 8 else d
+    session_disp = {"早": "早盘", "午": "午盘", "晚": "收盘"}.get(
+        ma["session"], ma["session"])
+
+    meta_parts = []
+    if ma.get("breadth"):
+        meta_parts.append(f'<span>广度 <b>{ma["breadth"]}</b></span>')
+    if ma.get("avg_change"):
+        meta_parts.append(f'<span>均幅 <b>{ma["avg_change"]}</b></span>')
+    if ma.get("total_volume"):
+        meta_parts.append(f'<span>成交 <b>{ma["total_volume"]}</b></span>')
+    meta_html = " ".join(meta_parts)
+
+    pane_html = ""
+    if ma.get("pane"):
+        items = "".join(f'<li>{p}</li>' for p in ma["pane"])
+        pane_html = (
+            '<div class="ma-sub">盘面特征</div>'
+            f'<ul class="ma-list">{items}</ul>'
+        )
+
+    summary_html = ""
+    if ma.get("summary"):
+        summary_html = (
+            '<div class="ma-sub">综合评述</div>'
+            f'<p class="ma-para">{ma["summary"]}</p>'
+        )
+
+    return f"""
+<div class="sec">市场复盘 · Baostock 视角</div>
+<div class="ma">
+  <div class="ma-head">
+    <div class="ma-title">
+      📈 A股市场行情日报
+      <span class="ma-when">· {date_disp} {session_disp}</span>
+    </div>
+    <span class="ma-sent {sent_cls}">{sent or "—"}</span>
+  </div>
+  <div class="ma-meta">{meta_html}</div>
+  {pane_html}
+  {summary_html}
+  <div class="ma-src">源文件：<code>StockAnalysis/{ma["filename"]}</code></div>
+</div>"""
+
 
 # ─────────────────────────────────────────────────────────
 # GitHub Pages 首页索引（repo 根目录 index.html）
@@ -1055,10 +1254,22 @@ def main(session: str = None):
         except Exception as e:
             log(f"⚠ 股吧抓取失败: {e}")
 
+    # 加载 StockAnalysis/ 最新市场日报（可能为 None）
+    market_analysis = None
+    try:
+        market_analysis = load_latest_market_analysis(BASE_DIR.parent)
+        if market_analysis:
+            log(f"  集成 StockAnalysis: {market_analysis['filename']}")
+        else:
+            log("  未找到 StockAnalysis/ 市场日报，跳过复盘章节")
+    except Exception as e:
+        log(f"⚠ StockAnalysis 加载失败: {e}（不影响主报告）")
+
     # 生成 HTML（内含图表下载）
     log("生成报告 HTML（含图表快照下载）...")
     html = generate_html(t_day, indices, stock_data, news,
-                         guba_html=guba_html, session=session, gen_dt=gen_dt)
+                         guba_html=guba_html, session=session, gen_dt=gen_dt,
+                         market_analysis=market_analysis)
 
     report_path.write_text(html, encoding="utf-8")
     size_kb = report_path.stat().st_size // 1024

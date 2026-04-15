@@ -331,8 +331,9 @@ def fetch_all(days_back: int = 1, show_all: bool = False,
 # ─────────────────────────────────────────────────────────
 
 SENT_STYLE = {
-    "bullish": ("background:#dcfce7;color:#15803d;border:1px solid #bbf7d0", "📈 看多"),
-    "bearish": ("background:#fee2e2;color:#b91c1c;border:1px solid #fecaca", "📉 看空"),
+    # A股红涨绿跌：看多（期待上涨）用红，看空（期待下跌）用绿
+    "bullish": ("background:#fee2e2;color:#b91c1c;border:1px solid #fecaca", "📈 看多"),
+    "bearish": ("background:#dcfce7;color:#15803d;border:1px solid #bbf7d0", "📉 看空"),
     "neutral": ("background:#f1f5f9;color:#475569;border:1px solid #e2e8f0", "➡️ 中性"),
 }
 
