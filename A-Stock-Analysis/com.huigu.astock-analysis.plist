@@ -5,7 +5,7 @@
   <key>Label</key><string>com.huigu.astock-analysis</string>
   <key>ProgramArguments</key><array>
     <string>/usr/bin/python3</string>
-    <string>{{SCRIPT_DIR}}/scripts/run_daily.py</string>
+    <string>{{SCRIPT_DIR}}/run_daily.py</string>
     <string>--session</string>
     <string>morning</string>
   </array>
