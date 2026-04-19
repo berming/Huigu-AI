@@ -742,7 +742,7 @@ def render_capital_flow(cf):
         {svg}
       </div>"""
 
-def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt):
+def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indices, watch, breadth, stats, analyses, summary):
     meta = SESSIONS[session]
     title_name = meta["title"]
     period_txt = meta["period"]
@@ -757,6 +757,102 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt):
         ("s_sh000001", "上证指数"), ("s_sz399001", "深证成指"),
         ("s_sz399006", "创业板指"), ("s_sh000688", "科创50"), ("s_sh000016", "上证50"),
     ]
+
+    # ── Markdown 数据摘要 ──
+    rising = stats.get("rising", 0)
+    falling = stats.get("falling", 0)
+    sentiment = "偏多" if rising > falling else ("偏空" if falling > rising else "中性")
+    avg_pct = stats.get("avg_pct", 0)
+    total_amt = stats.get("total_amt", 0)
+    date_str_md = t_day.strftime("%Y-%m-%d")
+    period_map = {"morning": "早市（盘前参考）", "noon": "午市（午盘总结）", "evening": "晚市（收盘复盘）"}
+    period_cn = period_map.get(session, "日常")
+    md_gen_time = gen_dt.strftime("%H:%M:%S")
+
+    md_lines = []
+    md_lines.append(f"# 📈 A股市场行情日报")
+    md_lines.append(f"")
+    md_lines.append(f"**报告日期：** {date_str_md} {period_cn}")
+    md_lines.append(f"**生成时间：** {md_gen_time} · 数据截至 {date_str_md}")
+    md_lines.append(f"**市场情绪：** {sentiment}（{rising}涨 / {falling}跌）")
+    md_lines.append(f"")
+    md_lines.append(f"---")
+    md_lines.append(f"")
+    md_lines.append(f"## 一、中国A股整体行情")
+    md_lines.append(f"")
+    md_lines.append(f"**市场广度：** {rising}涨 / {falling}跌 · 平均涨跌幅：**{avg_pct:+.2f}%** · 合计成交额：**{fmt_amt(total_amt)}**")
+    md_lines.append(f"")
+    md_lines.append(f"### 主要指数表现")
+    md_lines.append(f"")
+    md_lines.append(f"| 指数 | 代码 | 收盘点位 | 涨跌幅 | 涨跌额 | 最高 | 最低 | 成交量 | 成交额 |")
+    md_lines.append(f"|------|------|---------|--------|--------|------|------|--------|--------|")
+    for idx in indices:
+        a = "▲" if idx["pctChg"] > 0 else "▼" if idx["pctChg"] < 0 else "―"
+        s = "+" if idx["pctChg"] > 0 else ""
+        md_lines.append(f'| {idx["name"]} | {idx["code"]} | {idx["close"]:,.2f} | {a} {s}{idx["pctChg"]:.2f}% | {idx["change"]:+,.2f} | {idx["high"]:,.2f} | {idx["low"]:,.2f} | {fmt_vol(idx["volume"])} | {fmt_amt(idx["amount"])} |')
+    md_lines.append(f"")
+    md_lines.append(f"> 数据来源：Baostock · 仅供参考，不构成投资建议")
+    md_lines.append(f"")
+    # Market breadth
+    if breadth:
+        md_lines.append(f"## 二、今日动态")
+        md_lines.append(f"")
+        md_lines.append(f"### 市场节奏（近5日涨跌）")
+        md_lines.append(f"")
+        for name, info in breadth.items():
+            up = info["up_days"]
+            dn = info["total_days"] - up
+            bars = "🟢" * up + "🔴" * dn
+            md_lines.append(f"- **{name}**：{bars} （{up}涨 / {dn}跌 · 均幅 {info['recent_avg']:+.2f}%）")
+        md_lines.append(f"")
+    # Analyses
+    icon_map = {"大盘趋势": "📈", "量价特征": "📊", "风格特征": "🎯", "自选股动向": "🔍", "近期节奏": "🔄"}
+    if analyses:
+        md_lines.append(f"### 盘面特征")
+        md_lines.append(f"")
+        for a in analyses:
+            if a["title"] in ("大盘趋势", "量价特征", "风格特征"):
+                icon = icon_map.get(a["title"], "•")
+                trend_part = f'（{a["trend"]}）' if a["trend"] else ""
+                md_lines.append(f"- **{icon} {a['title']}{trend_part}**：{a['desc']}")
+        md_lines.append(f"")
+    # Watch stocks
+    md_lines.append(f"## 三、自选个股动态")
+    md_lines.append(f"")
+    valid = [s for s in watch if not s.get("error")]
+    if valid:
+        md_lines.append(f"| 股票 | 代码 | 业务 | 收盘价 | 涨跌幅 | 涨跌额 | MA5 | MA10 | 距20日高点 | 距20日低点 |")
+        md_lines.append(f"|------|------|------|--------|--------|--------|-----|------|----------|----------|")
+        for s in valid:
+            a = "▲" if s["pctChg"] > 0 else "▼" if s["pctChg"] < 0 else "―"
+            sp = "+" if s["pctChg"] > 0 else ""
+            md_lines.append(f'| {s["name"]} | {s["code"]} | {s["tag"]} | {s["close"]:.2f} | {a} {sp}{s["pctChg"]:.2f}% | {s["change"]:+.2f} | {s.get("ma5",0):.2f} | {s.get("ma10",0):.2f} | {s["pct_from_high"]:.1f}% | {s["pct_from_low"]:+.1f}% |')
+        md_lines.append(f"")
+        strong = max(valid, key=lambda x: x["pctChg"])
+        weak = min(valid, key=lambda x: x["pctChg"])
+        avg_pct_s = sum(s["pctChg"] for s in valid) / len(valid)
+        md_lines.append(f"**自选股小结：** 平均 {avg_pct_s:+.2f}%，{strong['name']}({strong['pctChg']:+.2f}%)最强，{weak['name']}({weak['pctChg']:+.2f}%)最弱。")
+        md_lines.append(f"")
+    # Analyses full
+    if analyses:
+        md_lines.append(f"## 四、规律及趋势分析")
+        md_lines.append(f"")
+        for a in analyses:
+            icon = icon_map.get(a["title"], "•")
+            trend_part = f'（{a["trend"]}）' if a["trend"] else ""
+            md_lines.append(f"- **{icon} {a['title']}{trend_part}**：{a['desc']}")
+        md_lines.append(f"")
+    # Summary
+    if summary:
+        md_lines.append(f"## 五、综合评述")
+        md_lines.append(f"")
+        md_lines.append(f"{summary}")
+        md_lines.append(f"")
+    md_lines.append(f"---")
+    md_lines.append(f"")
+    md_lines.append(f"*🤖 本报告由 Huigu-AI 自动生成 · 数据来源 Baostock · 仅供参考，不构成投资建议*")
+    md_content = chr(10).join(md_lines)
+
     idx_cells = ""
     for key, label in idx_map:
         d = sina_indices.get(key, {})
@@ -872,7 +968,7 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 .news ul{{padding-left:18px}}
 .news li{{font-size:12px;color:#475569;line-height:2;border-bottom:1px solid #f8fafc;padding:2px 0}}
 .news li:last-child{{border-bottom:none}}
-.disc{{font-size:10px;color:#94a3b8;padding:10px 14px;background:#fff;border-radius:8px;text-align:center;margin-top:14px;line-height:1.7;border:1px solid #e2e8f0}}
+.disc{{font-size:10px;color:#94a3b8;padding:10px 14px;background:#fff;border-radius:8px;text-align:center;margin-top:14px;line-height:1.7;border:1px solid #e2e8f0}}.md-sec{{margin-top:28px}}.md-wrap{{background:#fff;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:16px;overflow:hidden}}.md-content{{font-size:12px;line-height:1.7;padding:16px 18px;white-space:pre-wrap;word-break:break-all;color:#374151}}
 </style>
 </head>
 <body>
@@ -884,6 +980,8 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
   </div>
   <span class="bdg">📁 {file_badge}</span>
 </div>
+<div class="sec md-sec">📋 Markdown 数据报告</div>
+<div class="md-wrap"><pre class="md-content">{{md_content}}</pre></div>
 <div class="sec">主要指数（实时行情）</div>
 <div class="idx-row">{idx_cells}</div>
 <div class="sec">个股行情 · 分时图 + 日K线快照（离线存档）</div>
@@ -1098,15 +1196,13 @@ def main(session=None):
 
     # ── 生成报告 ──
     html_path = REPORT_DIR / f"astock_{file_date}_{hhmm}.html"
-    html = generate_html(t_day, sina_indices, stock_data, news, session, gen_dt)
+    html = generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indices, watch, breadth, stats, analyses, summary)
     html_path.write_text(html, encoding="utf-8")
     size_kb = html_path.stat().st_size // 1024
     log.info(f"✅ HTML 报告已保存: {html_path} ({size_kb} KB)")
 
-    md_fname, md_content = generate_markdown(session, indices, breadth, stats, watch, analyses, summary)
-    md_path = REPORT_DIR / md_fname
-    md_path.write_text(md_content, encoding="utf-8")
-    log.info(f"✅ Markdown 报告已保存: {md_path}")
+    # Markdown 报告已融合至 HTML，不再单独生成
+    log.info(f"✅ Markdown 数据已融合至 HTML 报告")
 
     # ── 刷新索引 ──
     try:
