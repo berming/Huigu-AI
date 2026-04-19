@@ -531,112 +531,6 @@ def make_summary(indices, watch_stocks, stats):
 # ─────────────────────────────────────────────
 # 9. Markdown 报告生成
 # ─────────────────────────────────────────────
-def generate_markdown(period, indices, breadth, stats, watch, analyses, summary):
-    now = get_bj_now()
-    date_str = now.strftime('%Y-%m-%d')
-    period_map = {'morning': '早市（盘前参考）', 'noon': '午市（午盘总结）', 'evening': '晚市（收盘复盘）'}
-    period_cn = period_map.get(period, '日常')
-    period_key = {'morning': '早', 'noon': '午', 'evening': '晚'}[period]
-    fname = f"stock_report_{date_str.replace('-','')}_{period_key}.md"
-    rising = stats.get('rising', 0)
-    falling = stats.get('falling', 0)
-    sentiment = '偏多' if rising > falling else ('偏空' if falling > rising else '中性')
-
-    lines = []
-    lines.append(f"# 📈 A股市场行情日报")
-    lines.append(f"")
-    lines.append(f"**报告日期：** {date_str} {period_cn}")
-    lines.append(f"**生成时间：** {now.strftime('%H:%M:%S')} · 数据截至 {date_str}")
-    lines.append(f"**市场情绪：** {sentiment}（{rising}涨 / {falling}跌）")
-    lines.append(f"")
-    lines.append(f"---")
-    lines.append(f"")
-    lines.append(f"## 一、中国A股整体行情")
-    lines.append(f"")
-    if stats:
-        lines.append(f"**市场广度：** {rising}涨 / {falling}跌（主要指数）")
-        lines.append(f"**平均涨跌幅：** {stats['avg_pct']:+.2f}%")
-        lines.append(f"**合计成交额：** {fmt_amt(stats['total_amt'])}元")
-        lines.append(f"")
-    lines.append(f"### 主要指数表现")
-    lines.append(f"")
-    lines.append(f"| 指数 | 代码 | 收盘点位 | 涨跌幅 | 涨跌额 | 最高 | 最低 | 成交量 | 成交额 |")
-    lines.append(f"|------|------|---------|--------|--------|------|------|--------|--------|")
-    for idx in indices:
-        a = '▲' if idx['pctChg'] > 0 else '▼' if idx['pctChg'] < 0 else '―'
-        s = '+' if idx['pctChg'] > 0 else ''
-        lines.append(
-            f"| {idx['name']} | {idx['code']} | "
-            f"{idx['close']:,.2f} | {a} {s}{idx['pctChg']:.2f}% | "
-            f"{idx['change']:+,.2f} | "
-            f"{idx['high']:,.2f} | {idx['low']:,.2f} | "
-            f"{fmt_vol(idx['volume'])} | {fmt_amt(idx['amount'])} |"
-        )
-    lines.append(f"")
-    lines.append(f"> 数据来源：Baostock · 仅供参考，不构成投资建议")
-    lines.append(f"")
-    lines.append(f"## 二、今日动态")
-    lines.append(f"")
-    if breadth:
-        lines.append(f"### 市场节奏（近5日涨跌）")
-        lines.append(f"")
-        for name, info in breadth.items():
-            up = info['up_days']
-            dn = info['total_days'] - up
-            bars = '🟢' * up + '🔴' * dn
-            lines.append(f"- **{name}**：{bars} （{up}涨 / {dn}跌 · 均幅 {info['recent_avg']:+.2f}%）")
-        lines.append(f"")
-    lines.append(f"### 盘面特征")
-    lines.append(f"")
-    icon_map = {'大盘趋势': '📈', '量价特征': '📊', '风格特征': '🎯', '自选股动向': '🔍', '近期节奏': '🔄'}
-    for a in analyses:
-        if a['title'] in ('大盘趋势', '量价特征', '风格特征'):
-            icon = icon_map.get(a['title'], '•')
-            lines.append(f"- **{icon} {a['title']}：** {a['trend']} {a['desc']}".strip())
-    lines.append(f"")
-    lines.append(f"## 三、自选个股动态")
-    lines.append(f"")
-    valid = [s for s in watch if not s.get('error')]
-    if valid:
-        lines.append(f"| 股票 | 代码 | 业务 | 收盘价 | 涨跌幅 | 涨跌额 | MA5 | MA10 | 距20日高点 | 距20日低点 |")
-        lines.append(f"|------|------|------|--------|--------|--------|-----|------|----------|----------|")
-        for s in valid:
-            a = '▲' if s['pctChg'] > 0 else '▼' if s['pctChg'] < 0 else '―'
-            sp = '+' if s['pctChg'] > 0 else ''
-            lines.append(
-                f"| {s['name']} | {s['code']} | {s['tag']} | "
-                f"{s['close']:.2f} | {a} {sp}{s['pctChg']:.2f}% | "
-                f"{s['change']:+.2f} | "
-                f"{s.get('ma5',0):.2f} | {s.get('ma10',0):.2f} | "
-                f"{s['pct_from_high']:.1f}% | {s['pct_from_low']:+.1f}% |"
-            )
-        lines.append(f"")
-        strong = max(valid, key=lambda x: x['pctChg'])
-        weak = min(valid, key=lambda x: x['pctChg'])
-        avg_pct_s = sum(s['pctChg'] for s in valid) / len(valid)
-        lines.append(f"**自选股小结：** 平均 {avg_pct_s:+.2f}%，{strong['name']}({strong['pctChg']:+.2f}%)最强，{weak['name']}({weak['pctChg']:+.2f}%)最弱。")
-    else:
-        lines.append(f"暂无数据")
-    lines.append(f"")
-    lines.append(f"## 四、规律及趋势分析")
-    lines.append(f"")
-    for a in analyses:
-        icon = icon_map.get(a['title'], '•')
-        if a['trend']:
-            lines.append(f"- **{icon} {a['title']}（{a['trend']}）：** {a['desc']}")
-        else:
-            lines.append(f"- **{icon} {a['title']}：** {a['desc']}")
-    lines.append(f"")
-    lines.append(f"## 五、综合评述")
-    lines.append(f"")
-    lines.append(f"{summary}")
-    lines.append(f"")
-    lines.append(f"---")
-    lines.append(f"")
-    lines.append(f"*🤖 本报告由 Huigu-AI 自动生成 · 数据来源 Baostock · 仅供参考，不构成投资建议*")
-
-    return fname, '\n'.join(lines)
-
 # ─────────────────────────────────────────────
 # 10. HTML 报告生成（主力资金图表 + 分时/K线快照）
 # ─────────────────────────────────────────────
@@ -757,8 +651,7 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
         ("s_sh000001", "上证指数"), ("s_sz399001", "深证成指"),
         ("s_sz399006", "创业板指"), ("s_sh000688", "科创50"), ("s_sh000016", "上证50"),
     ]
-
-    # ── Markdown 数据摘要 ──
+    # ── Define data variables ──
     rising = stats.get("rising", 0)
     falling = stats.get("falling", 0)
     sentiment = "偏多" if rising > falling else ("偏空" if falling > rising else "中性")
@@ -769,89 +662,109 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
     period_cn = period_map.get(session, "日常")
     md_gen_time = gen_dt.strftime("%H:%M:%S")
 
-    md_lines = []
-    md_lines.append(f"# 📈 A股市场行情日报")
-    md_lines.append(f"")
-    md_lines.append(f"**报告日期：** {date_str_md} {period_cn}")
-    md_lines.append(f"**生成时间：** {md_gen_time} · 数据截至 {date_str_md}")
-    md_lines.append(f"**市场情绪：** {sentiment}（{rising}涨 / {falling}跌）")
-    md_lines.append(f"")
-    md_lines.append(f"---")
-    md_lines.append(f"")
-    md_lines.append(f"## 一、中国A股整体行情")
-    md_lines.append(f"")
-    md_lines.append(f"**市场广度：** {rising}涨 / {falling}跌 · 平均涨跌幅：**{avg_pct:+.2f}%** · 合计成交额：**{fmt_amt(total_amt)}**")
-    md_lines.append(f"")
-    md_lines.append(f"### 主要指数表现")
-    md_lines.append(f"")
-    md_lines.append(f"| 指数 | 代码 | 收盘点位 | 涨跌幅 | 涨跌额 | 最高 | 最低 | 成交量 | 成交额 |")
-    md_lines.append(f"|------|------|---------|--------|--------|------|------|--------|--------|")
+    # ── Build merged HTML report sections from all data ──
+    icon_map = {"大盘趋势": "📈", "量价特征": "📊", "风格特征": "🎯", "自选股动向": "🔍", "近期节奏": "🔄"}
+    valid = [s for s in watch if not s.get("error")]
+
+    # Section 1: Header + Market Summary
+    sentiment_html = "偏多" if rising > falling else ("偏空" if falling > rising else "中性")
+    sentiment_cls = "up" if rising > falling else ("dn" if falling > rising else "nt")
+    report_html = ("<div class='rpt-card rpt-header'>"
+                  "<div class='rpt-title'>📈 A股市场行情日报</div>"
+                  "<div class='rpt-meta'>"
+                  "<span>报告日期：<strong>" + date_str_md + "</strong> " + period_cn + "</span>"
+                  "<span>生成时间：" + md_gen_time + " BJ</span>"
+                  "<span>市场情绪：<strong class='" + sentiment_cls + "'>" + sentiment_html + "</strong>（" + str(rising) + "涨 / " + str(falling) + "跌）</span>"
+                  "<span>平均涨跌幅：<strong>" + ("{:+.2f}".format(avg_pct)) + "%</strong></span>"
+                  "<span>合计成交额：<strong>" + fmt_amt(total_amt) + "</strong></span>"
+                  "</div></div>")
+
+    # Section 2: Main Indices Table
+    idx_rows_html = ""
     for idx in indices:
         a = "▲" if idx["pctChg"] > 0 else "▼" if idx["pctChg"] < 0 else "―"
         s = "+" if idx["pctChg"] > 0 else ""
-        md_lines.append(f'| {idx["name"]} | {idx["code"]} | {idx["close"]:,.2f} | {a} {s}{idx["pctChg"]:.2f}% | {idx["change"]:+,.2f} | {idx["high"]:,.2f} | {idx["low"]:,.2f} | {fmt_vol(idx["volume"])} | {fmt_amt(idx["amount"])} |')
-    md_lines.append(f"")
-    md_lines.append(f"> 数据来源：Baostock · 仅供参考，不构成投资建议")
-    md_lines.append(f"")
-    # Market breadth
+        pct_cls = "up" if idx["pctChg"] > 0 else ("dn" if idx["pctChg"] < 0 else "nt")
+        idx_rows_html += ("<tr><td>" + idx["name"] + "</td><td>" + idx["code"] + "</td>"
+                         "<td>" + ("{:,.2f}".format(idx["close"])) + "</td>"
+                         "<td class='" + pct_cls + "'>" + a + " " + s + ("{:+.2f}".format(idx["pctChg"])) + "%</td>"
+                         "<td>" + ("%+ .2f" % idx["change"]) + "</td>"
+                         "<td>" + ("{:,.2f}".format(idx["high"])) + "</td>"
+                         "<td>" + ("{:,.2f}".format(idx["low"])) + "</td>"
+                         "<td>" + fmt_vol(idx["volume"]) + "</td>"
+                         "<td>" + fmt_amt(idx["amount"]) + "</td></tr>")
+
+    report_html += ("<div class='rpt-card'>"
+                    "<div class='rpt-sec'>一、主要指数</div>"
+                    "<table class='rpt-tbl'>"
+                    "<thead><tr><th>指数</th><th>代码</th><th>收盘点位</th><th>涨跌幅</th><th>涨跌额</th><th>最高</th><th>最低</th><th>成交量</th><th>成交额</th></tr></thead>"
+                    "<tbody>" + idx_rows_html + "</tbody></table>"
+                    "<div class='rpt-src'>数据来源：Baostock · 仅供参考，不构成投资建议</div></div>")
+
+    # Section 3: Market Breadth
     if breadth:
-        md_lines.append(f"## 二、今日动态")
-        md_lines.append(f"")
-        md_lines.append(f"### 市场节奏（近5日涨跌）")
-        md_lines.append(f"")
+        br_items = []
         for name, info in breadth.items():
-            up = info["up_days"]
-            dn = info["total_days"] - up
+            up = info["up_days"]; dn = info["total_days"] - up
             bars = "🟢" * up + "🔴" * dn
-            md_lines.append(f"- **{name}**：{bars} （{up}涨 / {dn}跌 · 均幅 {info['recent_avg']:+.2f}%）")
-        md_lines.append(f"")
-    # Analyses
-    icon_map = {"大盘趋势": "📈", "量价特征": "📊", "风格特征": "🎯", "自选股动向": "🔍", "近期节奏": "🔄"}
-    if analyses:
-        md_lines.append(f"### 盘面特征")
-        md_lines.append(f"")
-        for a in analyses:
-            if a["title"] in ("大盘趋势", "量价特征", "风格特征"):
-                icon = icon_map.get(a["title"], "•")
-                trend_part = f'（{a["trend"]}）' if a["trend"] else ""
-                md_lines.append(f"- **{icon} {a['title']}{trend_part}**：{a['desc']}")
-        md_lines.append(f"")
-    # Watch stocks
-    md_lines.append(f"## 三、自选个股动态")
-    md_lines.append(f"")
-    valid = [s for s in watch if not s.get("error")]
+            br_items.append("<div class='br-item'><strong>" + name + "</strong>：" + bars + "（" + str(up) + "涨/" + str(dn) + "跌 · 均幅 " + ("{:+.2f}".format(info["recent_avg"])) + "%）</div>")
+        report_html += ("<div class='rpt-card'>"
+                       "<div class='rpt-sec'>二、市场节奏（近5日涨跌）</div>"
+                       "<div class='rpt-breadth'>" + "".join(br_items) + "</div></div>")
+
+    # Section 4: Watch Stocks Table
+    stock_rows_html = ""
     if valid:
-        md_lines.append(f"| 股票 | 代码 | 业务 | 收盘价 | 涨跌幅 | 涨跌额 | MA5 | MA10 | 距20日高点 | 距20日低点 |")
-        md_lines.append(f"|------|------|------|--------|--------|--------|-----|------|----------|----------|")
         for s in valid:
             a = "▲" if s["pctChg"] > 0 else "▼" if s["pctChg"] < 0 else "―"
             sp = "+" if s["pctChg"] > 0 else ""
-            md_lines.append(f'| {s["name"]} | {s["code"]} | {s["tag"]} | {s["close"]:.2f} | {a} {sp}{s["pctChg"]:.2f}% | {s["change"]:+.2f} | {s.get("ma5",0):.2f} | {s.get("ma10",0):.2f} | {s["pct_from_high"]:.1f}% | {s["pct_from_low"]:+.1f}% |')
-        md_lines.append(f"")
+            pct_cls = "up" if s["pctChg"] > 0 else ("dn" if s["pctChg"] < 0 else "nt")
+            stock_rows_html += ("<tr>"
+                               "<td>" + s["name"] + "</td><td>" + s["code"] + "</td><td>" + s["tag"] + "</td>"
+                               "<td>" + ("%.2f" % s["close"]) + "</td>"
+                               "<td class='" + pct_cls + "'>" + a + " " + sp + ("{:+.2f}".format(s["pctChg"])) + "%</td>"
+                               "<td>" + ("{:+.2f}".format(s["change"])) + "</td>"
+                               "<td>" + ("%.2f" % s.get("ma5", 0)) + "</td>"
+                               "<td>" + ("%.2f" % s.get("ma10", 0)) + "</td>"
+                               "<td>" + ("%.1f" % s["pct_from_high"]) + "%</td>"
+                               "<td>" + ("{:+.1f}".format(s["pct_from_low"])) + "%</td>"
+                               "</tr>")
         strong = max(valid, key=lambda x: x["pctChg"])
         weak = min(valid, key=lambda x: x["pctChg"])
         avg_pct_s = sum(s["pctChg"] for s in valid) / len(valid)
-        md_lines.append(f"**自选股小结：** 平均 {avg_pct_s:+.2f}%，{strong['name']}({strong['pctChg']:+.2f}%)最强，{weak['name']}({weak['pctChg']:+.2f}%)最弱。")
-        md_lines.append(f"")
-    # Analyses full
+        stock_note = ("自选股小结：平均 " + ("{:+.2f}".format(avg_pct_s)) + "%，"
+                      + strong["name"] + "(" + ("{:+.2f}".format(strong["pctChg"])) + "%)最强，"
+                      + weak["name"] + "(" + ("{:+.2f}".format(weak["pctChg"])) + "%)最弱。")
+    else:
+        stock_note = "暂无数据"
+
+    report_html += ("<div class='rpt-card'>"
+                    "<div class='rpt-sec'>三、自选个股</div>"
+                    "<table class='rpt-tbl'>"
+                    "<thead><tr><th>股票</th><th>代码</th><th>业务</th><th>收盘价</th><th>涨跌幅</th><th>涨跌额</th><th>MA5</th><th>MA10</th><th>距高点</th><th>距低点</th></tr></thead>"
+                    "<tbody>" + stock_rows_html + "</tbody></table>"
+                    "<div class='rpt-note'>" + stock_note + "</div></div>")
+
+    # Section 5: Trends Analysis
     if analyses:
-        md_lines.append(f"## 四、规律及趋势分析")
-        md_lines.append(f"")
+        ana_items = []
         for a in analyses:
             icon = icon_map.get(a["title"], "•")
-            trend_part = f'（{a["trend"]}）' if a["trend"] else ""
-            md_lines.append(f"- **{icon} {a['title']}{trend_part}**：{a['desc']}")
-        md_lines.append(f"")
-    # Summary
+            trend = ("（" + a["trend"] + "）") if a["trend"] else ""
+            ana_items.append("<li><strong>" + icon + " " + a["title"] + trend + "</strong>：" + a["desc"] + "</li>")
+        if ana_items:
+            report_html += ("<div class='rpt-card'>"
+                           "<div class='rpt-sec'>四、趋势分析</div>"
+                           "<ul class='rpt-ana'>" + "".join(ana_items) + "</ul></div>")
+
+    # Section 6: Summary
     if summary:
-        md_lines.append(f"## 五、综合评述")
-        md_lines.append(f"")
-        md_lines.append(f"{summary}")
-        md_lines.append(f"")
-    md_lines.append(f"---")
-    md_lines.append(f"")
-    md_lines.append(f"*🤖 本报告由 Huigu-AI 自动生成 · 数据来源 Baostock · 仅供参考，不构成投资建议*")
-    md_content = chr(10).join(md_lines)
+        report_html += ("<div class='rpt-card'>"
+                       "<div class='rpt-sec'>五、综合评述</div>"
+                       "<div class='rpt-summary'>" + summary + "</div>"
+                       "<div class='rpt-src'>🤖 本报告由 Huigu-AI 自动生成 · 数据来源 Baostock · 仅供参考，不构成投资建议</div></div>")
+
+    report_html += "<div class='rpt-card rpt-chart-sec'><div class='rpt-sec'>六、个股行情（实时数据）</div></div>"
 
     idx_cells = ""
     for key, label in idx_map:
@@ -980,8 +893,7 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
   </div>
   <span class="bdg">📁 {file_badge}</span>
 </div>
-<div class="sec md-sec">📋 Markdown 数据报告</div>
-<div class="md-wrap"><pre class="md-content">{{md_content}}</pre></div>
+{report_html}
 <div class="sec">主要指数（实时行情）</div>
 <div class="idx-row">{idx_cells}</div>
 <div class="sec">个股行情 · 分时图 + 日K线快照（离线存档）</div>
