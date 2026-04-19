@@ -3,11 +3,9 @@
 """
 git_push.py
 将 A-Stock-Analysis/reports/ 下的报告推送到 GitHub。
-使用 GitPython 直接操作，无须 shell。
 """
 
 import subprocess
-import sys
 import datetime
 import logging
 from pathlib import Path
@@ -24,7 +22,12 @@ log = logging.getLogger(__name__)
 
 
 def run_git(*args, cwd=None):
-    result = subprocess.run(["git"] + list(args), cwd=cwd or BASE_DIR, capture_output=True, text=True)
+    result = subprocess.run(
+        ["git"] + list(args),
+        cwd=cwd or BASE_DIR,
+        capture_output=True,
+        text=True,
+    )
     if result.returncode != 0:
         log.warning(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result
@@ -41,9 +44,12 @@ def main(session=None):
     run_git("config", "user.email", "bot@huigu.ai", cwd=repo)
 
     # Add new/changed files
-    result = run_git("add", f"A-Stock-Analysis/reports/", cwd=repo)
+    run_git("add", "A-Stock-Analysis/reports/", cwd=repo)
     result = run_git("status", "--porcelain", cwd=repo)
-    staged = [l for l in result.stdout.splitlines() if l.startswith(("A", "M", "?", "D")))]
+    staged = [
+        l for l in result.stdout.splitlines()
+        if l and l[0] in ("A", "M", "?", "D")
+    ]
     log.info(f"变更文件: {staged}")
 
     if not staged:
