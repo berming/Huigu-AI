@@ -561,6 +561,223 @@ def _cf_amount_span(v):
     except Exception:
         return '<span class="nt">—</span>'
 
+
+def compute_indicators(s, w, cf):
+    """Compute RSI, MACD, MA, support/resistance from available data."""
+    ind = {}
+    close = w.get("close") or (s.get("price") and float(s.get("price"))) or 0
+    # RSI from capital flow days chg_pct
+    if cf and cf.get("ok") and len(cf["days"]) >= 5:
+        n = min(len(cf["days"]), 14)
+        chgs = [cf["days"][i].get("chg_pct") or 0 for i in range(-n, 0)]
+        gains = [max(c, 0) for c in chgs]
+        losses = [abs(min(c, 0)) for c in chgs]
+        ag = sum(gains) / n
+        al = sum(losses) / n
+        ind["rsi"] = round(100 - 100 / (1 + ag / al), 1) if al > 0 else 100
+    # MACD from close in cf days
+    if cf and cf.get("ok") and len(cf["days"]) >= 26:
+        closes = [d.get("close", 0) for d in cf["days"]]
+        def _ema(data, p):
+            k = 2.0 / (p + 1)
+            r = [data[0]]
+            for v in data[1:]: r.append(v * k + r[-1] * (1 - k))
+            return r
+        e12 = _ema(closes[-12:] if len(closes) >= 12 else closes, 12)[-1]
+        e26 = _ema(closes[-26:] if len(closes) >= 26 else closes, 26)[-1]
+        macd = e12 - e26
+        macd_hist_vals = [_ema(closes[-12:] if len(closes) >= 12 else closes, 12)[i] -
+                          _ema(closes[-26:] if len(closes) >= 26 else closes, 26)[i]
+                          for i in range(len(_ema(closes[-26:] if len(closes) >= 26 else closes, 26)))]
+        sig = sum(macd_hist_vals[-9:]) / min(9, len(macd_hist_vals)) if len(macd_hist_vals) >= 9 else macd
+        ind["macd"] = round(macd, 3)
+        ind["macd_signal"] = round(sig, 3)
+        ind["macd_hist"] = round(macd - sig, 3)
+    # MA from Baostock watch data
+    ind["ma5"] = w.get("ma5")
+    ind["ma10"] = w.get("ma10")
+    if ind["ma5"] and ind["ma10"]:
+        ind["ma_cross"] = "金叉" if ind["ma5"] > ind["ma10"] else "死叉"
+    # Support / Resistance
+    ind["resistance"] = w.get("high20")
+    ind["support"] = w.get("low20")
+    ind["pct_from_high"] = w.get("pct_from_high")
+    ind["pct_from_low"] = w.get("pct_from_low")
+    # Range position
+    h20, l20 = w.get("high20", 0), w.get("low20", 0)
+    if h20 and l20 and h20 != l20:
+        ind["range_pos"] = round((close - l20) / (h20 - l20) * 100, 1)
+    else:
+        ind["range_pos"] = 50
+    # 5-day momentum
+    ind["up5"] = w.get("up5", 0)
+    ind["up5_pct"] = round(w.get("pctChg") or 0, 2)
+    # Volume ratio proxy (from amount)
+    if cf and cf.get("ok") and len(cf["days"]) >= 5:
+        today_amt = abs(cf["days"][-1].get("main", 0) + cf["days"][-1].get("small", 0))
+        prev_amts = [abs(cf["days"][i].get("main", 0) + cf["days"][i].get("small", 0))
+                     for i in range(-5, -1)]
+        avg_amt = sum(prev_amts) / max(len(prev_amts), 1) if prev_amts else 1
+        ind["vol_ratio"] = round(today_amt / avg_amt, 1) if avg_amt > 0 else 1
+    return ind
+
+
+def _tag(cls, text):
+    return "<div class=\'da-tag " + cls + "\'>" + text + "</div>"
+
+
+def render_depth_analysis(s, w, cf, tech, news_latest=None):
+    """Render depth analysis HTML for a single stock."""
+    name = s.get("name", "")
+    close = w.get("close") or (s.get("price") and float(s.get("price"))) or 0
+    tag = s.get("tag", "")
+
+    # ── RSI ──
+    rsi = tech.get("rsi")
+    if rsi is not None:
+        if rsi >= 70:   rc, rt = "ovb", "超买"
+        elif rsi <= 30: rc, rt = "ovs", "超卖"
+        elif rsi >= 60: rc, rt = "str", "偏强"
+        elif rsi <= 40: rc, rt = "wkr", "偏弱"
+        else:           rc, rt = "neu", "中性"
+        rsi_html = "<div class=\'da-row\'><div class=\'da-cell\'>" + _tag(rc, "RSI(14) " + str(rsi) + " · " + rt) + "</div>"
+    else:
+        rsi_html = "<div class=\'da-row\'><div class=\'da-cell\'>" + _tag("neu", "RSI(14) —") + "</div>"
+
+    # ── MACD ──
+    macd = tech.get("macd"); macd_sig = tech.get("macd_signal")
+    if macd is not None and macd_sig is not None:
+        mc = "up" if macd > 0 else "dn"
+        mi = "▲" if macd >= 0 else "▼"
+        hc = "up" if tech.get("macd_hist", 0) >= 0 else "dn"
+        hi = "▲" if tech.get("macd_hist", 0) >= 0 else "▼"
+        macd_html = ("<div class=\'da-cell\'>" +
+            _tag(mc, mi + " " + str(abs(macd)) +
+                 " &nbsp;<span class=\'cf-pct " + hc + "\'>" + hi + str(abs(tech.get("macd_hist", 0))) + "</span>") +
+            "</div></div>")
+    else:
+        macd_html = "<div class=\'da-cell\'>" + _tag("neu", "MACD —") + "</div></div>"
+
+    # ── MA ──
+    ma5 = tech.get("ma5"); ma10 = tech.get("ma10")
+    if ma5 and ma10:
+        xc = "up" if close > ma5 else "dn"
+        xn = tech.get("ma_cross", "")
+        ma_txt = "MA5 " + ("%.2f" % ma5) + " / MA10 " + ("%.2f" % ma10) + " · <span class=\'" + xc + "\'>" + xn + "</span>"
+    elif ma5:
+        ma_txt = "MA5 " + ("%.2f" % ma5)
+    else:
+        ma_txt = "MA 数据不可用"
+    ma_html = "<div class=\'da-row\'><div class=\'da-cell\'>" + _tag("neu", ma_txt) + "</div>"
+
+    # ── Range / Support ──
+    res = tech.get("resistance"); sup = tech.get("support"); pos = tech.get("range_pos", 50)
+    if res and sup:
+        pc = "up" if pos > 50 else "dn"
+        range_txt = ("区间 " + ("%.2f" % sup) + "~" + ("%.2f" % res) +
+                     " · <span class=\'" + pc + "\'>当前位置 " + str(pos) + "%</span>")
+    else:
+        range_txt = "—"
+    range_html = "<div class=\'da-cell\'>" + _tag("neu", range_txt) + "</div></div>"
+
+    # ── Momentum ──
+    up5 = tech.get("up5", 0); up5pct = tech.get("up5_pct", 0)
+    mc = "up" if up5 >= 3 else ("dn" if up5 <= 1 else "neu")
+    mom_html = ("<div class=\'da-row\'><div class=\'da-cell\'>" +
+                _tag(mc, "近5日 " + str(up5) + "涨 · 今日 " + ("%+0.2f" % up5pct) + "%") + "</div>")
+
+    # ── Volume ──
+    vr = tech.get("vol_ratio")
+    if vr is not None:
+        vc = "up" if vr > 1 else "dn"
+        vol_html = "<div class=\'da-cell\'>" + _tag(vc, "量比 " + str(vr) + "x") + "</div></div>"
+    else:
+        vol_html = "<div class=\'da-cell\'>" + _tag("neu", "量比 —") + "</div></div>"
+
+    tech_section = ("<div class=\'tech-grid\'>" + rsi_html + macd_html +
+                    ma_html + range_html + mom_html + vol_html + "</div>")
+
+    # ── Sentiment ──
+    sent_parts = []
+    if cf and cf.get("ok"):
+        today = cf.get("today", {})
+        main_net = today.get("main", 0)
+        small_net = today.get("small", 0)
+        main5 = cf.get("sum5", {}).get("main", 0)
+        if main_net > 50000000:
+            sent_parts.append(_tag("up", "主力净流入 +" + ("%.1f" % (main_net / 100000000)) + "亿 · 强势"))
+        elif main_net < -50000000:
+            sent_parts.append(_tag("dn", "主力净流出 " + ("%.1f" % (abs(main_net) / 100000000)) + "亿 · 偏弱"))
+        else:
+            sent_parts.append(_tag("neu", "主力净流入 " + ("%.1f" % (main_net / 100000000)) + "亿 · 中性"))
+        if small_net > 0:
+            sent_parts.append(_tag("neu", "散户跟入 +" + ("%.1f" % (small_net / 100000000)) + "亿"))
+        elif small_net < 0:
+            sent_parts.append(_tag("neu", "散户减仓 " + ("%.1f" % (abs(small_net) / 100000000)) + "亿"))
+        if main5 > 0:
+            sent_parts.append(_tag("up", "5日主力净流入 +" + ("%.1f" % (main5 / 100000000)) + "亿"))
+        elif main5 < 0:
+            sent_parts.append(_tag("dn", "5日主力净流出 " + ("%.1f" % (abs(main5) / 100000000)) + "亿"))
+        total_f = abs(main_net) + abs(small_net)
+        main_ratio = abs(main_net) / total_f * 100 if total_f > 0 else 0
+        if main_ratio > 70:
+            sent_parts.append(_tag("ovb", "主力控盘度 " + ("%.0f" % main_ratio) + "% · 高度控盘"))
+        elif main_ratio > 50:
+            sent_parts.append(_tag("str", "主力占比 " + ("%.0f" % main_ratio) + "% · 持续流入"))
+    else:
+        sent_parts.append(_tag("neu", "资金数据暂不可用"))
+
+    sentiment_section = ("<div class=\'sentiment-items\'>" + "".join(sent_parts) + "</div>")
+
+    # ── Key events ──
+    events_html = ""
+    if news_latest:
+        matched = []
+        for h in news_latest:
+            if name and name in h:
+                matched.append(h)
+            elif tag:
+                for tk in tag.split("/"):
+                    tk = tk.strip()
+                    if len(tk) > 1 and tk in h:
+                        matched.append(h); break
+            if len(matched) >= 2: break
+        if matched:
+            ev_items = "".join("<li>" + ev + "</li>" for ev in matched)
+            events_html = "<div class=\'ev-title\'>📌 关联事件</div><ul class=\'ev-list\'>" + ev_items + "</ul>"
+
+    # ── Verdict ──
+    score = 0
+    if rsi:
+        if 40 <= rsi <= 60: score += 1
+        elif rsi < 30: score += 2
+        elif rsi > 70: score -= 1
+    if tech.get("ma_cross") == "金叉": score += 2
+    if main_net > 0: score += 1
+    if up5 >= 4: score += 1
+    if up5 <= 1: score -= 1
+    if score >= 3:   vc, vt = "up", "偏多"
+    elif score <= -1: vc, vt = "dn", "偏空"
+    else:            vc, vt = "neu", "中性"
+
+    verdict_html = ("<div class=\'da-verdict\'>"
+                    "<span class=\'verdict-label\'>综合研判</span>"
+                    "<span class=\'da-tag " + vc + " verdict-score\'>" + vt + "（评分 " + str(score) + "）</span>"
+                    "</div>")
+
+    return ("<div class=\'depth-section\'>"
+            "<div class=\'depth-toggle\' onclick=\'this.nextElementSibling.classList.toggle(\"hidden\");this.classList.toggle(\"rotated\")\'>"
+            "<span class=\'depth-toggle-icon\'>▸</span>📊 深度分析"
+            "</div>"
+            "<div class=\'depth-body hidden\'>"
+            "<div class=\'depth-cols\'>"
+            "<div class=\'depth-col\'><div class=\'depth-sub-title\'>🧠 技术面</div>" + tech_section + "</div>"
+            "<div class=\'depth-col\'><div class=\'depth-sub-title\'>💰 资金面</div>" + sentiment_section + events_html + "</div>"
+            "</div>"
+            + verdict_html
+            + "</div></div>")
+
+
 def render_capital_flow(cf):
     if not cf or not cf.get("ok"):
         err = (cf or {}).get("error", "")
@@ -779,7 +996,26 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
       </div>"""
 
     stock_cards = ""
+    # Build watch lookup by code for depth analysis
+    # Build watch lookup - handle both "002594" and "sz.002594" formats
+    watch_map = {}
+    for sw in watch:
+        watch_map[sw["code"]] = sw
+        # Also add with market prefix if missing
+        code = sw["code"]
+        if "." not in code:
+            for prefix in ("sz.", "sh."):
+                watch_map[prefix + code] = sw
+
     for s in stock_data:
+        code = s.get("code") or ""
+        w = watch_map.get(code, {})
+        if not w:
+            # Try to find by matching the numeric part
+            for k, v in watch_map.items():
+                if code.lstrip("0") in k.lstrip("sz.").lstrip("sh."):
+                    w = v; break
+
         code = s["code"]
         color = STOCK_COLORS.get(code, "#64748b")
         bg, fg = STOCK_TAGS_BG.get(code, ("#f1f5f9", "#475569"))
@@ -820,6 +1056,7 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
         </div>
       </div>
       {render_capital_flow(s.get("cf"))}
+      {render_depth_analysis(s, w, s.get("cf"), compute_indicators(s, w, s.get("cf")), news)}
     </div>"""
 
     news_items = "".join(f"<li>{n}</li>" for n in news) if news else "<li>当日要闻抓取失败</li>"
@@ -881,7 +1118,7 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 .news ul{{padding-left:18px}}
 .news li{{font-size:12px;color:#475569;line-height:2;border-bottom:1px solid #f8fafc;padding:2px 0}}
 .news li:last-child{{border-bottom:none}}
-.disc{{font-size:10px;color:#94a3b8;padding:10px 14px;background:#fff;border-radius:8px;text-align:center;margin-top:14px;line-height:1.7;border:1px solid #e2e8f0}}.md-sec{{margin-top:28px}}.md-wrap{{background:#fff;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:16px;overflow:hidden}}.md-content{{font-size:12px;line-height:1.7;padding:16px 18px;white-space:pre-wrap;word-break:break-all;color:#374151}}
+.disc{{font-size:10px;color:#94a3b8;padding:10px 14px;background:#fff;border-radius:8px;text-align:center;margin-top:14px;line-height:1.7;border:1px solid #e2e8f0}}.depth-section{{border-top:1px solid #f1f5f9;padding:12px 18px;background:#fafdff}}.depth-toggle{{font-size:12px;font-weight:600;color:#3b82f6;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;padding:4px 0}}.depth-toggle-icon{{font-size:10px;transition:transform .2s;display:inline-block}}.depth-toggle.rotated .depth-toggle-icon{{transform:rotate(90deg)}}.depth-body.hidden{{display:none}}.depth-cols{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}}.depth-sub-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin-bottom:6px}}.da-row{{display:flex;gap:6px;margin-bottom:4px}}.da-cell{{flex:1;min-width:0}}.da-tag{{display:inline-block;font-size:10px;padding:3px 7px;border-radius:4px;background:#f1f5f9;color:#475569;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}}.da-tag.up{{background:#fef2f2;color:#dc2626}}.da-tag.dn{{background:#f0fdf4;color:#16a34a}}.da-tag.ovb{{background:#fef2f2;color:#b91c1c}}.da-tag.ovs{{background:#f0fdf4;color:#15803d}}.da-tag.str{{background:#eff6ff;color:#1d4ed8}}.da-tag.wkr{{background:#fff7ed;color:#c2410c}}.da-tag.neu{{background:#f8fafc;color:#64748b}}.ev-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin:10px 0 6px}}.ev-list{{list-style:none;padding:0;margin:0}}.ev-list li{{font-size:11px;color:#475569;line-height:1.6;padding:3px 0;border-bottom:1px solid #f1f5f9}}.ev-list li:last-child{{border-bottom:none}}.da-verdict{{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9}}.verdict-label{{font-size:11px;font-weight:600;color:#475569}}.verdict-score{{font-weight:700;font-size:12px}}
 </style>
 </head>
 <body>
