@@ -766,10 +766,10 @@ def render_depth_analysis(s, w, cf, tech, news_latest=None):
                     "</div>")
 
     return ("<div class=\'depth-section\'>"
-            "<div class=\'depth-toggle\' onclick=\'this.nextElementSibling.classList.toggle(\"hidden\");this.classList.toggle(\"rotated\")\'>"
+            "<div class=\'depth-toggle rotated\' onclick=\'this.nextElementSibling.classList.toggle(\"hidden\");this.classList.toggle(\"rotated\")\'>"
             "<span class=\'depth-toggle-icon\'>▸</span>📊 深度分析"
             "</div>"
-            "<div class=\'depth-body hidden\'>"
+            "<div class=\'depth-body\'>"
             "<div class=\'depth-cols\'>"
             "<div class=\'depth-col\'><div class=\'depth-sub-title\'>🧠 技术面</div>" + tech_section + "</div>"
             "<div class=\'depth-col\'><div class=\'depth-sub-title\'>💰 资金面</div>" + sentiment_section + events_html + "</div>"
