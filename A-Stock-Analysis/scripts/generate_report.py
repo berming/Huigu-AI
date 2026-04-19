@@ -853,6 +853,330 @@ def render_capital_flow(cf):
         {svg}
       </div>"""
 
+def compute_deep_indicators(s, w, cf):
+    """
+    Compute comprehensive technical indicators.
+    KDJ(9,3,3), Bollinger Bands(20,2), ATR(14), ADX(14), OBV, MA system, score/verdict.
+    """
+    import statistics
+    ind = {}
+    close = w.get("close") or (s.get("price") and float(s.get("price"))) or 0
+    high20 = w.get("high20") or close
+    low20 = w.get("low20") or close
+
+    # OHLCV from Baostock (extra history for KDJ)
+    code = w.get("code", s.get("code", ""))
+    # Build full 9-char Baostock code
+    numeric = code.split(".")[-1] if "." in code else code
+    full_code = numeric if len(numeric) == 9 else code  # use as-is if already 9-char
+    df_kl = None
+    try:
+        import baostock as bs
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone(timedelta(hours=8)))
+        end_d = now.strftime("%Y-%m-%d")
+        start_d = (now - timedelta(days=50)).strftime("%Y-%m-%d")
+        rs = bs.query_history_k_data_plus(full_code,
+            fields="date,open,high,low,close,volume,amount,pctChg",
+            start_date=start_d, end_date=end_d, frequency="d", adjustflag="2")
+        data = []
+        while rs.error_code == '0' and rs.next():
+            data.append(rs.get_row_data())
+        if data:
+            import pandas as pd
+            cols = ["date","open","high","low","close","volume","amount","pctChg"]
+            df_kl = pd.DataFrame(data, columns=cols)
+            for c in ["open","high","low","close","volume","amount","pctChg"]:
+                df_kl[c] = pd.to_numeric(df_kl[c], errors="coerce")
+    except Exception:
+        pass
+
+    kl  = df_kl.tail(30)["close"].tolist() if df_kl is not None and len(df_kl) > 9 else []
+    kl_h = df_kl.tail(30)["high"].tolist() if df_kl is not None and len(df_kl) > 9 else []
+    kl_l = df_kl.tail(30)["low"].tolist()  if df_kl is not None and len(df_kl) > 9 else []
+    kl_v = df_kl.tail(30)["volume"].tolist() if df_kl is not None and len(df_kl) > 9 else []
+
+    # KDJ (9,3,3)
+    n = 9
+    if len(kl_l) >= n:
+        kvals, dvals = [50.0], [50.0]
+        for i in range(n, len(kl_l) + 1):
+            wl = min(kl_l[i-n:i]); wh = max(kl_h[i-n:i])
+            rsv = (kl[i-1] - wl) / (wh - wl) * 100.0 if wh != wl else 50.0
+            kvals.append(kvals[-1] * 2.0/3.0 + rsv / 3.0)
+        for kv in kvals[1:]:
+            dvals.append(dvals[-1] * 2.0/3.0 + kv / 3.0)
+        j = 3.0 * kvals[-1] - 2.0 * dvals[-1]
+        ind["kdj_k"] = round(kvals[-1], 1)
+        ind["kdj_d"] = round(dvals[-1], 1)
+        ind["kdj_j"] = round(j, 1)
+        if j > 80:                  ind["kdj_signal"] = "超买"
+        elif j < 20:               ind["kdj_signal"] = "超卖"
+        elif kvals[-1] > dvals[-1] and kvals[-1] < 30:  ind["kdj_signal"] = "低位金叉"
+        elif kvals[-1] > dvals[-1]: ind["kdj_signal"] = "金叉"
+        elif kvals[-1] < dvals[-1] and kvals[-1] > 70:  ind["kdj_signal"] = "高位死叉"
+        elif kvals[-1] < dvals[-1]: ind["kdj_signal"] = "死叉"
+        else:                       ind["kdj_signal"] = "中性"
+    else:
+        ind["kdj_k"] = ind["kdj_d"] = ind["kdj_j"] = None
+        ind["kdj_signal"] = "数据不足"
+
+    # Bollinger Bands (20,2)
+    if len(kl) >= 20:
+        ma20 = statistics.mean(kl[-20:])
+        std = statistics.pstdev(kl[-20:])
+        upper = ma20 + 2.0 * std; lower = ma20 - 2.0 * std
+        ind["boll_mid"]   = round(ma20, 2)
+        ind["boll_upper"] = round(upper, 2)
+        ind["boll_lower"] = round(lower, 2)
+        pos = (close - lower) / (upper - lower) * 100.0 if upper != lower else 50.0
+        ind["boll_pos"] = round(pos, 1)
+        if close < lower:            ind["boll_signal"] = "下轨下方（超卖）"
+        elif close > upper:           ind["boll_signal"] = "上轨上方（超买）"
+        elif pos > 80:                ind["boll_signal"] = "上轨附近（偏强）"
+        elif pos < 20:                ind["boll_signal"] = "下轨附近（偏弱）"
+        else:                         ind["boll_signal"] = "布林带内运行"
+    else:
+        ind["boll_signal"] = "数据不足"
+
+    # ATR (14)
+    if len(kl) >= 15 and len(kl_h) >= 15:
+        trs = []
+        for i in range(-15, 0):
+            hl = kl_h[i] - kl_l[i]
+            trs.append(max(hl, abs(kl_h[i] - kl[i-1]), abs(kl_l[i] - kl[i-1])))
+        ind["atr"] = round(sum(trs[-14:]) / 14.0, 3) if len(trs) >= 14 else None
+
+    # ADX (14) - simplified
+    if len(kl) >= 15 and len(kl_h) >= 15:
+        pdm = [max(kl_h[i]-kl_h[i-1], 0) if (kl_h[i]-kl_h[i-1]) > (kl_l[i-1]-kl_l[i]) else 0 for i in range(-14, 0)]
+        ndm = [max(kl_l[i-1]-kl_l[i], 0) if (kl_l[i-1]-kl_l[i]) > (kl_h[i]-kl_h[i-1]) else 0 for i in range(-14, 0)]
+        sp, sn = sum(pdm), sum(ndm)
+        adx = min(abs(sp - sn) / (sp + sn + 0.001) * 100.0, 100.0)
+        ind["adx"] = round(adx, 1)
+        ind["adx_signal"] = "强趋势" if adx > 30 else ("趋势运行" if adx > 20 else ("震荡市" if adx > 15 else "趋势不明"))
+    else:
+        ind["adx"] = None; ind["adx_signal"] = "数据不足"
+
+    # OBV
+    if len(kl) >= 2 and len(kl_v) >= 2:
+        obv = sum((kl_v[i] if kl[i] > kl[i-1] else -kl_v[i] if kl[i] < kl[i-1] else 0)
+                  for i in range(1, min(len(kl), len(kl_v))))
+        obv_p = sum((kl_v[i] if kl[i] > kl[i-1] else -kl_v[i] if kl[i] < kl[i-1] else 0)
+                  for i in range(1, min(len(kl)-1, len(kl_v)-1)))
+        ind["obv"] = round(obv / 100000000.0, 2)
+        ind["obv_trend"] = "上升" if obv > obv_p else "下降"
+
+    # MA system
+    ma5 = w.get("ma5"); ma10 = w.get("ma10")
+    if ma5 and ma10:
+        if close > ma5 > ma10:       ind["ma_signal"] = "多头排列（强势）"
+        elif close < ma5 < ma10:    ind["ma_signal"] = "空头排列（弱势）"
+        elif close > ma5:           ind["ma_signal"] = "MA5上方"
+        else:                        ind["ma_signal"] = "MA5下方"
+    else:
+        ind["ma_signal"] = "数据不足"
+
+    # Support / Resistance
+    if high20 and low20 and high20 != low20:
+        rng = high20 - low20
+        ind["resistance1"] = round(high20, 2)
+        ind["resistance2"] = round(high20 + rng * 0.5, 2)
+        ind["support1"] = round(low20, 2)
+        ind["support2"] = round(low20 - rng * 0.5, 2)
+    else:
+        ind["resistance1"] = round(close * 1.02, 2)
+        ind["resistance2"] = round(close * 1.05, 2)
+        ind["support1"] = round(close * 0.98, 2)
+        ind["support2"] = round(close * 0.95, 2)
+
+    # Volume ratio
+    if df_kl is not None and len(df_kl) >= 5:
+        avg5 = df_kl.tail(5)["volume"].mean()
+        tv   = df_kl.iloc[-1]["volume"] if len(df_kl) >= 1 else 0
+        ind["vol_ratio"] = round(tv / avg5, 2) if avg5 else 1.0
+
+    # Market PE percentile
+    try:
+        import warnings as _w; _w.filterwarnings("ignore")
+        import os as _os; _os.environ["SSL_CERT_FILE"] = "/etc/ssl/cert.pem"
+        import akshare as ak
+        df_pe = ak.stock_a_ttm_lyr()
+        if df_pe is not None and len(df_pe) > 0:
+            lv = df_pe.iloc[-1]
+            ind["market_pe"]    = round(float(lv.get("middlePETTM") or 0), 1)
+            ind["market_pe_pct"]  = round(float(lv.get("quantileInAllHistoryMiddlePeTtm") or 0) * 100, 1)
+            ind["market_pe_10y"]  = round(float(lv.get("quantileInRecent10YearsMiddlePeTtm") or 0) * 100, 1)
+    except Exception:
+        pass
+
+    # Score synthesis
+    score = 0; sigs = []
+    ks = ind.get("kdj_signal", "")
+    if ks in ("超卖", "低位金叉"):     score += 2; sigs.append("KDJ低位")
+    if "超买" in ks:                  score -= 1; sigs.append("KDJ超买")
+    if "金叉" in ks and "低位" not in ks: score += 1; sigs.append("KDJ金叉")
+    if "死叉" in ks and "高位" not in ks: score -= 1; sigs.append("KDJ死叉")
+    if ind.get("boll_signal", "").startswith("下轨"):  score += 1; sigs.append("BOLL下轨")
+    if ind.get("boll_signal", "").startswith("上轨"):  score -= 1; sigs.append("BOLL上轨")
+    if ind.get("ma_signal", "").startswith("多头"):    score += 2; sigs.append("MA多头")
+    if ind.get("ma_signal", "").startswith("空头"):   score -= 2; sigs.append("MA空头")
+    if ind.get("adx_signal") == "强趋势":
+        score += (1 if (ind.get("kdj_k") or 50) > 50 else -1); sigs.append("强趋势")
+    if ind.get("obv_trend") == "上升": score += 1; sigs.append("OBV上升")
+
+    if score >= 3:       verdict, v_cls = "偏多", "up"
+    elif score <= -2:    verdict, v_cls = "偏空", "dn"
+    elif score >= 1:     verdict, v_cls = "震荡偏多", "up"
+    elif score <= -1:    verdict, v_cls = "震荡偏空", "dn"
+    else:                verdict, v_cls = "中性震荡", "neu"
+    ind["score"] = score; ind["signals"] = sigs
+    ind["verdict"] = verdict; ind["verdict_cls"] = v_cls
+    return ind
+
+
+def _sc(cl, txt):
+    return "<span class='" + cl + "'>" + txt + "</span>"
+
+
+def render_deep_analysis(s, w, cf, tech):
+    """Render enhanced deep analysis HTML for a single stock."""
+    name = s.get("name", ""); tag = s.get("tag", "")
+    close = w.get("close") or (s.get("price") and float(s.get("price"))) or 0
+
+    # KDJ
+    kk = tech.get("kdj_k"); kd = tech.get("kdj_d"); kj = tech.get("kdj_j")
+    ks = tech.get("kdj_signal", "")
+    if kk is not None:
+        kc = "ovb" if kk > 80 else ("ovs" if kk < 20 else ("str" if kk > 50 else "wkr"))
+        kdj_html = ("<div class='da-tag " + kc + "'>KDJ K:" + ("%.1f" % kk) +
+                    " D:" + ("%.1f" % kd) + " J:" + ("%.1f" % kj) + " · " + ks + "</div>")
+    else:
+        kdj_html = "<div class='da-tag neu'>KDJ — " + ks + "</div>"
+
+    # Bollinger
+    bs = tech.get("boll_signal", ""); bp = tech.get("boll_pos")
+    if bs != "数据不足" and bp is not None:
+        pc = "up" if bp > 50 else "dn"
+        boll_html = "<div class='da-tag neu'>BOLL " + bs + " · 位置" + _sc(pc, " %.0f%%" % bp) + "</div>"
+    else:
+        boll_html = "<div class='da-tag neu'>BOLL —</div>"
+
+    # ADX
+    ax = tech.get("adx"); adxs = tech.get("adx_signal", "")
+    if ax is not None:
+        ac = "up" if ax > 25 else ("dn" if ax < 15 else "neu")
+        adx_html = "<div class='da-tag " + ac + "'>ADX " + ("%.1f" % ax) + " · " + adxs + "</div>"
+    else:
+        adx_html = "<div class='da-tag neu'>ADX —</div>"
+
+    # OBV
+    obv = tech.get("obv"); obt = tech.get("obv_trend", "")
+    if obv is not None:
+        oc = "up" if obt == "上升" else "dn"
+        obv_html = "<div class='da-tag " + oc + "'>OBV " + ("%.2f亿" % obv) + " · " + obt + "</div>"
+    else:
+        obv_html = "<div class='da-tag neu'>OBV —</div>"
+
+    # MA
+    ma5 = tech.get("ma5") or w.get("ma5"); ma10 = tech.get("ma10") or w.get("ma10")
+    ms = tech.get("ma_signal", "")
+    mtxt = ("MA5 " + ("%.2f" % ma5) + " / MA10 " + ("%.2f" % ma10) + " · " + ms) if (ma5 and ma10) else ms
+    ma_html = "<div class='da-tag neu'>" + mtxt + "</div>"
+
+    # S/R
+    r1 = tech.get("resistance1"); r2 = tech.get("resistance2")
+    s1 = tech.get("support1"); s2 = tech.get("support2")
+    sr_html = ("<div class='da-tag neu'>" +
+               "阻力 " + ("%.2f" % r1 if r1 else "—") + " / " + ("%.2f" % r2 if r2 else "—") +
+               " · 支承 " + ("%.2f" % s1 if s1 else "—") + " / " + ("%.2f" % s2 if s2 else "—") + "</div>")
+
+    # ATR
+    atr = tech.get("atr")
+    if atr is not None and close:
+        ap = atr / close * 100.0
+        atr_html = "<div class='da-tag neu'>ATR " + ("%.3f" % atr) + "（波动 " + ("%.1f%%" % ap) + "）</div>"
+    else:
+        atr_html = "<div class='da-tag neu'>ATR —</div>"
+
+    # Volume
+    vr = tech.get("vol_ratio")
+    vc = "up" if (vr or 1) > 1.2 else ("dn" if (vr or 1) < 0.8 else "neu")
+    vr_html = "<div class='da-tag " + vc + "'>量比 " + ("%.2fx" % vr if vr else "—") + "</div>"
+
+    tech_rows = (
+        "<div class='da-row'><div class='da-cell'>" + kdj_html + "</div><div class='da-cell'>" + boll_html + "</div></div>"
+        "<div class='da-row'><div class='da-cell'>" + adx_html + "</div><div class='da-cell'>" + obv_html + "</div></div>"
+        "<div class='da-row'><div class='da-cell'>" + ma_html + "</div><div class='da-cell'>" + sr_html + "</div></div>"
+        "<div class='da-row'><div class='da-cell'>" + atr_html + "</div><div class='da-cell'>" + vr_html + "</div></div>"
+    )
+
+    # Sentiment
+    sp = []
+    if cf and cf.get("ok"):
+        mn  = cf.get("today", {}).get("main") or 0
+        sn_ = cf.get("today", {}).get("small") or 0
+        m5  = cf.get("sum5", {}).get("main") or 0
+        m10 = cf.get("sum10", {}).get("main") or 0
+        if mn > 100000000:    sc, st = "up", "主力强势净流入"
+        elif mn < -100000000: sc, st = "dn", "主力净流出"
+        elif mn > 30000000:   sc, st = "up", "主力温和净流入"
+        elif mn < -30000000:  sc, st = "dn", "主力温和净流出"
+        else:                 sc, st = "neu", "主力进出平衡"
+        sp.append("<div class='da-tag " + sc + "'>" + st + " " + ("%+0.1f亿" % (mn/100000000)) + "</div>")
+        sc5 = "up" if m5 > 50000000 else ("dn" if m5 < -50000000 else "neu")
+        st5 = "5日净流入" if m5 > 50000000 else ("5日净流出" if m5 < -50000000 else "5日平衡")
+        sp.append("<div class='da-tag " + sc5 + "'>" + st5 + " " + ("%+0.1f亿" % (m5/100000000)) + "</div>")
+        sc10 = "up" if m10 > 100000000 else ("dn" if m10 < -100000000 else "neu")
+        st10 = "10日强势" if m10 > 100000000 else ("10日偏弱" if m10 < -100000000 else "10日中性")
+        sp.append("<div class='da-tag " + sc10 + "'>" + st10 + " " + ("%+0.1f亿" % (m10/100000000)) + "</div>")
+        tr = abs(mn) + abs(sn_)
+        mr = abs(mn) / tr * 100.0 if tr > 0 else 0
+        rc2 = "ovb" if mr > 70 else ("str" if mr > 50 else ("wkr" if mr < 30 else "neu"))
+        rt2 = "高度控盘" if mr > 70 else ("主力主导" if mr > 50 else ("资金分散" if mr < 30 else "散户主导"))
+        sp.append("<div class='da-tag " + rc2 + "'>" + rt2 + "（" + ("%.0f%%" % mr) + "）</div>")
+    else:
+        sp.append("<div class='da-tag neu'>资金数据不可用</div>")
+
+    # Verdict
+    score = tech.get("score", 0); sigs = tech.get("signals", [])
+    vt = tech.get("verdict", "中性"); vc = tech.get("verdict_cls", "neu")
+    vhtml = ("<div class='da-verdict'>"
+             "<span class='verdict-label'>综合研判</span>"
+             "<span class='da-tag " + vc + " verdict-score'>" + vt + "（" + str(score) + "分）</span>"
+             + ("<span class='sig-tag'>" + " · ".join(sigs) + "</span>" if sigs else "")
+             + "</div>")
+
+    # Market PE
+    mhtml = ""
+    mpe = tech.get("market_pe"); mpct = tech.get("market_pe_pct"); m10y = tech.get("market_pe_10y")
+    if mpe and mpct:
+        mpc = "up" if mpct > 70 else ("dn" if mpct < 30 else "neu")
+        m10y_c = "up" if (m10y or 0) > 50 else "dn"
+        mhtml = ("<div class='mkt-context'>"
+                 "<span class='mkt-label'>大盘估值</span>"
+                 "<span class='da-tag " + mpc + "'>全市场PE " + ("%.1f" % mpe) +
+                 " · 历史分位 " + ("%.0f%%" % mpct) + "</span>"
+                 "<span class='da-tag " + m10y_c + "'>10年分位 " + ("%.0f%%" % (m10y or 0)) + "</span></div>")
+
+    toggle_onclick = "this.nextElementSibling.classList.toggle(&quot;hidden&quot;);this.classList.toggle(&quot;rotated&quot;)"
+
+    return (
+        "<div class='depth-section'>"
+        "<div class='depth-toggle rotated' onclick='" + toggle_onclick + "'>"
+        "<span class='depth-toggle-icon'>▸</span>📊 深度分析"
+        "</div>"
+        "<div class='depth-body'>"
+        + mhtml
+        + "<div class='depth-cols'>"
+        "<div class='depth-col'><div class='depth-sub-title'>🧠 技术面</div><div class='tech-grid'>" + tech_rows + "</div></div>"
+        "<div class='depth-col'><div class='depth-sub-title'>💰 资金面</div><div class='sentiment-items'>" + "".join(sp) + "</div></div>"
+        + "</div>"
+        + vhtml
+        + "</div></div>"
+    )
+
+
 def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indices, watch, breadth, stats, analyses, summary):
     meta = SESSIONS[session]
     title_name = meta["title"]
@@ -1056,7 +1380,7 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
         </div>
       </div>
       {render_capital_flow(s.get("cf"))}
-      {render_depth_analysis(s, w, s.get("cf"), compute_indicators(s, w, s.get("cf")), news)}
+      {render_deep_analysis(s, w, s.get('cf'), compute_deep_indicators(s, w, s.get('cf')))}
     </div>"""
 
     news_items = "".join(f"<li>{n}</li>" for n in news) if news else "<li>当日要闻抓取失败</li>"
