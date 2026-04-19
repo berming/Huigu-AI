@@ -43,7 +43,7 @@ def main(session=None):
     # Add new/changed files
     result = run_git("add", f"A-Stock-Analysis/reports/", cwd=repo)
     result = run_git("status", "--porcelain", cwd=repo)
-    staged = [l for l in result.stdout.splitlines() if l.startswith(("A", "M", "?"," D")))]
+    staged = [l for l in result.stdout.splitlines() if l.startswith(("A", "M", "?", "D")))]
     log.info(f"变更文件: {staged}")
 
     if not staged:

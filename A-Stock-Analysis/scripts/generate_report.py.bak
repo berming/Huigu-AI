@@ -44,6 +44,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+bs.login()
 
 # ─────────────────────────────────────────────
 # 配置
@@ -202,7 +203,7 @@ def download_chart_b64(url, label):
         b64 = base64.b64encode(data).decode()
         return f"data:image/gif;base64,{b64}"
     except Exception as e:
-        log.info(f"  ⚠ {label} 图表下载失败: {e}")
+        log(f"  ⚠ {label} 图表下载失败: {e}")
         return PLACEHOLDER_SVG
 
 # ─────────────────────────────────────────────
@@ -317,7 +318,7 @@ def fetch_sina_index():
                 "chg_amt": fields[2], "chg_pct": fields[3], "vol": fields[4],
             }
     except Exception as e:
-        log.info(f"⚠ 新浪指数行情失败: {e}")
+        log(f"⚠ 新浪指数行情失败: {e}")
     return result
 
 def fetch_sina_stock(stock):
@@ -341,7 +342,7 @@ def fetch_sina_stock(stock):
                     result["chg_amt"] = round(cur - prev, 2)
                 except Exception: pass
     except Exception as e:
-        log.info(f"  新浪行情 {code} 失败: {e}")
+        log(f"  新浪行情 {code} 失败: {e}")
     # 同花顺校验
     try:
         url = f"http://stockpage.10jqka.com.cn/{code}/"
@@ -411,7 +412,7 @@ def fetch_capital_flow(stock, lmt=10):
         result["ok"] = True
     except Exception as e:
         result["error"] = str(e)
-        log.info(f"  ⚠ 主力资金 {code} 失败: {e}")
+        log(f"  ⚠ 主力资金 {code} 失败: {e}")
     return result
 
 # ─────────────────────────────────────────────
@@ -430,7 +431,7 @@ def fetch_market_news(t_day):
                 headlines.append(t)
                 if len(headlines) >= 8: break
     except Exception as e:
-        log.info(f"⚠ 快讯抓取失败: {e}")
+        log(f"⚠ 快讯抓取失败: {e}")
     return headlines
 
 # ─────────────────────────────────────────────
@@ -782,9 +783,9 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt):
 
         min_url = f"http://image.sinajs.cn/newchart/min/n/{mkt}{code}.gif"
         daily_url = f"http://image.sinajs.cn/newchart/daily/n/{mkt}{code}.gif"
-        log.info(f"  下载图表: {s['name']} 分时图...")
+        log(f"  下载图表: {s['name']} 分时图...")
         min_b64 = download_chart_b64(min_url, f"{s['name']} 分时图")
-        log.info(f"  下载图表: {s['name']} 日K线...")
+        log(f"  下载图表: {s['name']} 日K线...")
         daily_b64 = download_chart_b64(daily_url, f"{s['name']} 日K线")
 
         stock_cards += f"""
@@ -1005,7 +1006,7 @@ a.report-link:hover,a.report-link:active{{background:#f8fafc}}
 </body>
 </html>"""
     out_path.write_text(index_html, encoding="utf-8")
-    log.info(f"✅ 索引页已更新: {out_path}")
+    log(f"✅ 索引页已更新: {out_path}")
 
 # ─────────────────────────────────────────────
 # 主流程
@@ -1026,16 +1027,16 @@ def parse_session_arg(argv):
     return detect_session()
 
 def main(session=None):
+    log("=" * 60)
+    log("A-Stock-Analysis 报告生成器 启动")
     bs.login()
-    log.info("=" * 60)
-    log.info("A-Stock-Analysis 报告生成器 启动")
 
     if session is None:
         session = parse_session_arg(sys.argv)
     if session not in SESSIONS:
         raise ValueError(f"未知场次：{session}")
     meta = SESSIONS[session]
-    log.info(f"场次 = {session}（{meta['title']}）")
+    log(f"场次 = {session}（{meta['title']}）")
 
     t_day = get_t_day()
     gen_dt = get_bj_now()
@@ -1043,34 +1044,34 @@ def main(session=None):
     hhmm = gen_dt.strftime("%H%M")
     file_date = t_day.strftime("%Y%m%d")
 
-    log.info(f"最近交易日 T = {t_day}")
+    log(f"最近交易日 T = {t_day}")
     if not is_trading_day(today):
-        log.info(f"今日 {today} 非交易日")
+        log(f"今日 {today} 非交易日")
 
     # ── Baostock 数据 ──
-    log.info("抓取 Baostock 主要指数...")
+    log("抓取 Baostock 主要指数...")
     indices = get_index_data()
-    log.info(f"  获得 {len(indices)} 个指数")
+    log(f"  获得 {len(indices)} 个指数")
 
-    log.info("抓取 Baostock 市场广度...")
+    log("抓取 Baostock 市场广度...")
     breadth = get_market_breadth()
 
-    log.info("抓取 Baostock 自选股...")
+    log("抓取 Baostock 自选股...")
     watch = get_watch_stocks()
     for s in watch:
         if not s.get('error'):
-            log.info(f"  {s['name']} ({s['code']}) 收{s['close']:.2f} 涨跌{s['pctChg']:+.2f}%")
+            log(f"  {s['name']} ({s['code']}) 收{s['close']:.2f} 涨跌{s['pctChg']:+.2f}%")
 
     stats = get_market_stats(indices)
     analyses = analyze_trends(indices, watch, breadth)
     summary = make_summary(indices, watch, stats)
 
     # ── 新浪实时行情 ──
-    log.info("抓取新浪实时指数...")
+    log("抓取新浪实时指数...")
     sina_indices = fetch_sina_index()
-    log.info(f"  获得 {len(sina_indices)} 个指数")
+    log(f"  获得 {len(sina_indices)} 个指数")
 
-    log.info("抓取新浪实时个股 + 同花顺校验...")
+    log("抓取新浪实时个股 + 同花顺校验...")
     stock_pool = [
         {"name": "比亚迪",   "code": "002594", "market": "sz", "tag": "新能源汽车"},
         {"name": "华天科技", "code": "002185", "market": "sz", "tag": "先进封装"},
@@ -1084,29 +1085,29 @@ def main(session=None):
     ]
     stock_data = []
     for s in stock_pool:
-        log.info(f"  → {s['name']} ({s['code']})")
+        log(f"  → {s['name']} ({s['code']})")
         d = fetch_sina_stock(s)
-        log.info(f"    · 主力资金流向...")
+        log(f"    · 主力资金流向...")
         d["cf"] = fetch_capital_flow(s, lmt=10)
         stock_data.append(d)
         time.sleep(0.3)
 
     # ── 要闻 ──
-    log.info("抓取当日要闻...")
+    log("抓取当日要闻...")
     news = fetch_market_news(t_day)
-    log.info(f"  获得 {len(news)} 条")
+    log(f"  获得 {len(news)} 条")
 
     # ── 生成报告 ──
     html_path = REPORT_DIR / f"astock_{file_date}_{hhmm}.html"
     html = generate_html(t_day, sina_indices, stock_data, news, session, gen_dt)
     html_path.write_text(html, encoding="utf-8")
     size_kb = html_path.stat().st_size // 1024
-    log.info(f"✅ HTML 报告已保存: {html_path} ({size_kb} KB)")
+    log(f"✅ HTML 报告已保存: {html_path} ({size_kb} KB)")
 
     md_fname, md_content = generate_markdown(session, indices, breadth, stats, watch, analyses, summary)
     md_path = REPORT_DIR / md_fname
     md_path.write_text(md_content, encoding="utf-8")
-    log.info(f"✅ Markdown 报告已保存: {md_path}")
+    log(f"✅ Markdown 报告已保存: {md_path}")
 
     # ── 刷新索引 ──
     try:
@@ -1114,14 +1115,7 @@ def main(session=None):
         index_path = repo_root / "index.html"
         generate_index_html(REPORT_DIR, index_path)
     except Exception as e:
-        log.info(f"⚠ 索引页更新失败: {e}")
-
-    # ── 推送到 GitHub ──
-    try:
-        from git_push import main as push_main
-        push_main(session=session)
-    except Exception as e:
-        log.info(f"⚠ GitHub 推送失败: {e}")
+        log(f"⚠ 索引页更新失败: {e}")
 
     bs.logout()
     print(str(html_path))
