@@ -10,6 +10,7 @@ A股市场行情分析报告
 
 import baostock as bs
 import pandas as pd
+from tech_charts import render_tech_charts
 import base64
 import json
 import re
@@ -43,7 +44,6 @@ logging.basicConfig(
     ]
 )
 log = logging.getLogger(__name__)
-
 
 # ─────────────────────────────────────────────
 # 配置
@@ -561,7 +561,6 @@ def _cf_amount_span(v):
     except Exception:
         return '<span class="nt">—</span>'
 
-
 def compute_indicators(s, w, cf):
     """Compute RSI, MACD, MA, support/resistance from available data."""
     ind = {}
@@ -621,10 +620,8 @@ def compute_indicators(s, w, cf):
         ind["vol_ratio"] = round(today_amt / avg_amt, 1) if avg_amt > 0 else 1
     return ind
 
-
 def _tag(cls, text):
     return "<div class=\'da-tag " + cls + "\'>" + text + "</div>"
-
 
 def render_depth_analysis(s, w, cf, tech, news_latest=None):
     """Render depth analysis HTML for a single stock."""
@@ -776,7 +773,6 @@ def render_depth_analysis(s, w, cf, tech, news_latest=None):
             "</div>"
             + verdict_html
             + "</div></div>")
-
 
 def render_capital_flow(cf):
     if not cf or not cf.get("ok"):
@@ -1089,10 +1085,8 @@ def compute_deep_indicators(s, w, cf):
     ind["verdict"] = verdict; ind["verdict_cls"] = v_cls
     return ind
 
-
 def _sc(cl, txt):
     return "<span class='" + cl + "'>" + txt + "</span>"
-
 
 def render_deep_analysis(s, w, cf, tech):
     """Render enhanced deep analysis HTML for a single stock."""
@@ -1263,6 +1257,57 @@ def render_deep_analysis(s, w, cf, tech):
         + vhtml
         + "</div></div>"
     )
+
+
+def _render_stock_tech_charts(code, w):
+    """Fetch 90-day OHLCV from Baostock and render MACD/BOLL/KDJ charts."""
+    # Ensure baostock is logged in
+    try:
+        bs.login()
+    except Exception:
+        pass
+    raw = code.split(".")[-1] if "." in code else code
+    # Determine market prefix from w or code pattern
+    mkt = (w.get("market") or "").lower()
+    if mkt == "sz" or (not mkt and len(code) == 6 and code.startswith(("0", "3"))):
+        prefix = "sz."
+    elif mkt == "sh" or (not mkt and len(code) == 6 and code.startswith(("6", "9"))):
+        prefix = "sh."
+    else:
+        prefix = ""
+    full = (prefix + raw) if prefix else (raw if len(raw) == 9 else code)
+    try:
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone(timedelta(hours=8)))
+        end_d = now.strftime("%Y-%m-%d")
+        start_d = (now - timedelta(days=90)).strftime("%Y-%m-%d")
+        rs = bs.query_history_k_data_plus(full,
+            fields="date,open,high,low,close,volume,amount,pctChg",
+            start_date=start_d, end_date=end_d, frequency="d", adjustflag="2")
+        data = []
+        while rs.error_code == "0" and rs.next():
+            data.append(rs.get_row_data())
+        if not data:
+            return ""
+        import pandas as pd
+        cols = ["date","open","high","low","close","volume","amount","pctChg"]
+        df = pd.DataFrame(data, columns=cols)
+        for c in ["open","high","low","close","volume","amount","pctChg"]:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+        charts = render_tech_charts(df)
+        if not charts:
+            return ""
+        items = []
+        for key, label in [("macd","MACD(12,26,9)"),("boll","BOLL(20,2)"),("kdj","KDJ(9,3,3)")]:
+            if key in charts:
+                items.append(
+                    "<div class=\'tc\'>"
+                    "<div class=\'tc-label\'>" + label + "</div>"
+                    "<img src=\'data:image/png;base64," + charts[key] + "\' class=\'tc-img\' alt=\'" + label + "\'>"
+                    "</div>")
+        return "<div class=\'tc-row\'>" + "".join(items) + "</div>"
+    except Exception as e:
+        return ""
 
 
 def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indices, watch, breadth, stats, analyses, summary):
@@ -1443,6 +1488,7 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
         min_b64 = download_chart_b64(min_url, f"{s['name']} 分时图")
         log.info(f"  下载图表: {s['name']} 日K线...")
         daily_b64 = download_chart_b64(daily_url, f"{s['name']} 日K线")
+        tech_charts_html = _render_stock_tech_charts(code, w)
 
         stock_cards += f"""
     <div class="sc" style="border-top:3px solid {color}">
@@ -1469,6 +1515,7 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
       </div>
       {render_capital_flow(s.get("cf"))}
       {render_deep_analysis(s, w, s.get('cf'), compute_deep_indicators(s, w, s.get('cf')))}
+      {tech_charts_html}
     </div>"""
 
     news_items = "".join(f"<li>{n}</li>" for n in news) if news else "<li>当日要闻抓取失败</li>"
@@ -1530,7 +1577,7 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 .news ul{{padding-left:18px}}
 .news li{{font-size:12px;color:#475569;line-height:2;border-bottom:1px solid #f8fafc;padding:2px 0}}
 .news li:last-child{{border-bottom:none}}
-.disc{{font-size:10px;color:#94a3b8;padding:10px 14px;background:#fff;border-radius:8px;text-align:center;margin-top:14px;line-height:1.7;border:1px solid #e2e8f0}}.depth-section{{border-top:1px solid #f1f5f9;padding:12px 18px;background:#fafdff}}.depth-toggle{{font-size:12px;font-weight:600;color:#3b82f6;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;padding:4px 0}}.depth-toggle-icon{{font-size:10px;transition:transform .2s;display:inline-block}}.depth-toggle.rotated .depth-toggle-icon{{transform:rotate(90deg)}}.depth-body.hidden{{display:none}}.depth-cols{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}}.depth-sub-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin-bottom:6px}}.da-row{{display:flex;gap:6px;margin-bottom:4px}}.da-cell{{flex:1;min-width:0}}.da-tag{{display:inline-block;font-size:10px;padding:3px 7px;border-radius:4px;background:#f1f5f9;color:#475569;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}}.da-tag.up{{background:#fef2f2;color:#dc2626}}.da-tag.dn{{background:#f0fdf4;color:#16a34a}}.da-tag.ovb{{background:#fef2f2;color:#b91c1c}}.da-tag.ovs{{background:#f0fdf4;color:#15803d}}.da-tag.str{{background:#eff6ff;color:#1d4ed8}}.da-tag.wkr{{background:#fff7ed;color:#c2410c}}.da-tag.neu{{background:#f8fafc;color:#64748b}}.ev-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin:10px 0 6px}}.ev-list{{list-style:none;padding:0;margin:0}}.ev-list li{{font-size:11px;color:#475569;line-height:1.6;padding:3px 0;border-bottom:1px solid #f1f5f9}}.ev-list li:last-child{{border-bottom:none}}.da-verdict{{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9}}.verdict-label{{font-size:11px;font-weight:600;color:#475569}}.verdict-score{{font-weight:700;font-size:12px}}
+.disc{{font-size:10px;color:#94a3b8;padding:10px 14px;background:#fff;border-radius:8px;text-align:center;margin-top:14px;line-height:1.7;border:1px solid #e2e8f0}}.depth-section{{border-top:1px solid #f1f5f9;padding:12px 18px;background:#fafdff}}.depth-toggle{{font-size:12px;font-weight:600;color:#3b82f6;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;padding:4px 0}}.depth-toggle-icon{{font-size:10px;transition:transform .2s;display:inline-block}}.depth-toggle.rotated .depth-toggle-icon{{transform:rotate(90deg)}}.depth-body.hidden{{display:none}}.depth-cols{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}}.depth-sub-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin-bottom:6px}}.da-row{{display:flex;gap:6px;margin-bottom:4px}}.da-cell{{flex:1;min-width:0}}.da-tag{{display:inline-block;font-size:10px;padding:3px 7px;border-radius:4px;background:#f1f5f9;color:#475569;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}}.da-tag.up{{background:#fef2f2;color:#dc2626}}.da-tag.dn{{background:#f0fdf4;color:#16a34a}}.da-tag.ovb{{background:#fef2f2;color:#b91c1c}}.da-tag.ovs{{background:#f0fdf4;color:#15803d}}.da-tag.str{{background:#eff6ff;color:#1d4ed8}}.da-tag.wkr{{background:#fff7ed;color:#c2410c}}.da-tag.neu{{background:#f8fafc;color:#64748b}}.ev-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin:10px 0 6px}}.ev-list{{list-style:none;padding:0;margin:0}}.ev-list li{{font-size:11px;color:#475569;line-height:1.6;padding:3px 0;border-bottom:1px solid #f1f5f9}}.ev-list li:last-child{{border-bottom:none}}.da-verdict{{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9}}.verdict-label{{font-size:11px;font-weight:600;color:#475569}}.verdict-score{{font-weight:700;font-size:12px}}.tc-row{{display:flex;flex-direction:column;gap:8px;margin:10px 0 0}}.tc{{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}}.tc-label{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:.5px;margin-bottom:4px}}.tc-img{{width:100%;height:auto;display:block;border-radius:4px}}
 </style>
 </head>
 <body>
