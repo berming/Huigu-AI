@@ -948,6 +948,38 @@ def compute_deep_indicators(s, w, cf):
         ind["atr"] = round(sum(trs[-14:]) / 14.0, 3) if len(trs) >= 14 else None
 
     # ADX (14) - simplified
+    # MACD (12,26,9)
+    if len(kl) >= 26:
+        def _ema3(data, period):
+            k = 2.0 / (period + 1)
+            ema = [data[0]]
+            for v in data[1:]:
+                ema.append(v * k + ema[-1] * (1 - k))
+            return ema
+        e12 = _ema3(kl, 12)
+        e26 = _ema3(kl, 26)
+        dif = e12[-1] - e26[-1]
+        dif_s = [e12[i] - e26[i] for i in range(len(e26))]
+        sig = sum(dif_s[-9:]) / min(9, len(dif_s)) if len(dif_s) >= 9 else dif_s[-1]
+        hist = dif - sig
+        ind["macd_dif"] = round(dif, 3)
+        ind["macd_dea"] = round(sig, 3)
+        ind["macd_hist"] = round(hist, 3)
+        if dif > sig and hist > 0:     ind["macd_signal"] = "MACD 金叉（偏多）"
+        elif dif < sig and hist < 0: ind["macd_signal"] = "MACD 死叉（偏空）"
+        elif dif > sig:              ind["macd_signal"] = "MACD 零轴上方"
+        elif dif < sig:              ind["macd_signal"] = "MACD 零轴下方"
+        else:                         ind["macd_signal"] = "MACD 中性"
+    else:
+        ind["macd_signal"] = "数据不足"
+
+    # 20/60/250 day MA
+    for period, name in [(20,"ma20"), (60,"ma60"), (250,"ma250")]:
+        if len(kl) >= period:
+            ind[name] = round(sum(kl[-period:]) / period, 2)
+        else:
+            ind[name] = None
+
     if len(kl) >= 15 and len(kl_h) >= 15:
         pdm = [max(kl_h[i]-kl_h[i-1], 0) if (kl_h[i]-kl_h[i-1]) > (kl_l[i-1]-kl_l[i]) else 0 for i in range(-14, 0)]
         ndm = [max(kl_l[i-1]-kl_l[i], 0) if (kl_l[i-1]-kl_l[i]) > (kl_h[i]-kl_h[i-1]) else 0 for i in range(-14, 0)]
@@ -996,6 +1028,24 @@ def compute_deep_indicators(s, w, cf):
         tv   = df_kl.iloc[-1]["volume"] if len(df_kl) >= 1 else 0
         ind["vol_ratio"] = round(tv / avg5, 2) if avg5 else 1.0
 
+    # ROE, PE, PB from Baostock
+    try:
+        import baostock as bs
+        rs_p = bs.query_profit_data(code=full_code, year=2025, quarter=4)
+        prof_data = []
+        while rs_p.error_code == '0' and rs_p.next():
+            prof_data.append(rs_p.get_row_data())
+        if prof_data and len(prof_data) > 0:
+            # fields: code,pubDate,statDate,roeAvg,npMargin,gpMargin,netProfit,epsTTM,MBRevenue,totalShare,liqaShare
+            roe_val = prof_data[0][3]  # roeAvg is index 3
+            if roe_val:
+                ind["roe"] = round(float(roe_val) * 100, 2)  # as percentage
+            np_margin = prof_data[0][4]  # net profit margin
+            if np_margin:
+                ind["net_margin"] = round(float(np_margin) * 100, 2)
+    except Exception:
+        pass
+
     # Market PE percentile
     try:
         import warnings as _w; _w.filterwarnings("ignore")
@@ -1024,6 +1074,11 @@ def compute_deep_indicators(s, w, cf):
     if ind.get("adx_signal") == "强趋势":
         score += (1 if (ind.get("kdj_k") or 50) > 50 else -1); sigs.append("强趋势")
     if ind.get("obv_trend") == "上升": score += 1; sigs.append("OBV上升")
+    ms = ind.get("macd_signal", "")
+    if "金叉" in ms: score += 2; sigs.append("MACD金叉")
+    if "死叉" in ms: score -= 2; sigs.append("MACD死叉")
+    if "零轴上方" in ms: score += 1; sigs.append("MACD零轴上")
+    if "零轴下方" in ms: score -= 1; sigs.append("MACD零轴下")
 
     if score >= 3:       verdict, v_cls = "偏多", "up"
     elif score <= -2:    verdict, v_cls = "偏空", "dn"
@@ -1054,6 +1109,18 @@ def render_deep_analysis(s, w, cf, tech):
     else:
         kdj_html = "<div class='da-tag neu'>KDJ — " + ks + "</div>"
 
+    # MACD
+    ms = tech.get("macd_signal", "")
+    dif = tech.get("macd_dif"); dea = tech.get("macd_dea"); hist = tech.get("macd_hist")
+    if ms != "数据不足" and dif is not None:
+        mc = "up" if dif > 0 else "dn"
+        hc = "up" if (hist or 0) > 0 else "dn"
+        macd_html = ("<div class='da-tag " + mc + "'>MACD DIF:" + ("%.3f" % dif) +
+                     " DEA:" + ("%.3f" % dea) + " · " + ms +
+                     " <span class='" + hc + "'>柱:" + ("%.3f" % (hist or 0)) + "</span></div>")
+    else:
+        macd_html = "<div class='da-tag neu'>MACD — " + ms + "</div>"
+
     # Bollinger
     bs = tech.get("boll_signal", ""); bp = tech.get("boll_pos")
     if bs != "数据不足" and bp is not None:
@@ -1078,11 +1145,24 @@ def render_deep_analysis(s, w, cf, tech):
     else:
         obv_html = "<div class='da-tag neu'>OBV —</div>"
 
-    # MA
+    # MA20/60/250 system
+    ma20 = tech.get("ma20"); ma60 = tech.get("ma60"); ma250 = tech.get("ma250")
     ma5 = tech.get("ma5") or w.get("ma5"); ma10 = tech.get("ma10") or w.get("ma10")
     ms = tech.get("ma_signal", "")
-    mtxt = ("MA5 " + ("%.2f" % ma5) + " / MA10 " + ("%.2f" % ma10) + " · " + ms) if (ma5 and ma10) else ms
-    ma_html = "<div class='da-tag neu'>" + mtxt + "</div>"
+    if ma20 and ma60 and ma250:
+        cnt = sum([close > ma20, close > ma60, close > ma250])
+        if cnt == 3:    ma_long = "多头排列（强势）"; mlc = "up"
+        elif cnt == 0: ma_long = "空头排列（弱势）"; mlc = "dn"
+        elif cnt >= 2: ma_long = "偏多"; mlc = "up"
+        else:           ma_long = "偏弱"; mlc = "dn"
+        ma_txt = ("MA20:" + ("%.1f" % ma20) + " MA60:" + ("%.1f" % ma60) +
+                  " MA250:" + ("%.1f" % ma250) + " · " + ma_long)
+        ma_html = "<div class='da-tag " + mlc + "'>" + ma_txt + "</div>"
+    elif ma5 and ma10:
+        mtxt = ("MA5:" + ("%.2f" % ma5) + " MA10:" + ("%.2f" % ma10) + " · " + ms)
+        ma_html = "<div class='da-tag neu'>" + mtxt + "</div>"
+    else:
+        ma_html = "<div class='da-tag neu'>均线数据不足</div>"
 
     # S/R
     r1 = tech.get("resistance1"); r2 = tech.get("resistance2")
@@ -1105,10 +1185,11 @@ def render_deep_analysis(s, w, cf, tech):
     vr_html = "<div class='da-tag " + vc + "'>量比 " + ("%.2fx" % vr if vr else "—") + "</div>"
 
     tech_rows = (
-        "<div class='da-row'><div class='da-cell'>" + kdj_html + "</div><div class='da-cell'>" + boll_html + "</div></div>"
+        "<div class='da-row'><div class='da-cell'>" + kdj_html + "</div><div class='da-cell'>" + macd_html + "</div></div>"
         "<div class='da-row'><div class='da-cell'>" + adx_html + "</div><div class='da-cell'>" + obv_html + "</div></div>"
-        "<div class='da-row'><div class='da-cell'>" + ma_html + "</div><div class='da-cell'>" + sr_html + "</div></div>"
-        "<div class='da-row'><div class='da-cell'>" + atr_html + "</div><div class='da-cell'>" + vr_html + "</div></div>"
+        "<div class='da-row' style='flex-wrap:wrap'><div class='da-cell' style='min-width:100%'>" + ma_html + "</div></div>"
+        "<div class='da-row'><div class='da-cell'>" + sr_html + "</div><div class='da-cell'>" + atr_html + "</div></div>"
+        "<div class='da-row'><div class='da-cell'>" + vr_html + "</div></div>"
     )
 
     # Sentiment
@@ -1147,7 +1228,7 @@ def render_deep_analysis(s, w, cf, tech):
              + ("<span class='sig-tag'>" + " · ".join(sigs) + "</span>" if sigs else "")
              + "</div>")
 
-    # Market PE
+    # Market PE + ROE
     mhtml = ""
     mpe = tech.get("market_pe"); mpct = tech.get("market_pe_pct"); m10y = tech.get("market_pe_10y")
     if mpe and mpct:
@@ -1158,6 +1239,13 @@ def render_deep_analysis(s, w, cf, tech):
                  "<span class='da-tag " + mpc + "'>全市场PE " + ("%.1f" % mpe) +
                  " · 历史分位 " + ("%.0f%%" % mpct) + "</span>"
                  "<span class='da-tag " + m10y_c + "'>10年分位 " + ("%.0f%%" % (m10y or 0)) + "</span></div>")
+    roe = tech.get("roe")
+    if roe:
+        rcls = "up" if roe > 15 else ("str" if roe > 8 else "neu")
+        mhtml += ("<div class='mkt-context'>"
+                  "<span class='mkt-label'>基本面</span>"
+                  "<span class='da-tag " + rcls + "'>ROE " + ("%.1f" % roe) + "%</span>"
+                  + ("<span class='da-tag str'>净利润率 " + ("%.1f" % tech.get("net_margin", 0)) + "%</span>" if tech.get("net_margin") else "") + "</div>")
 
     toggle_onclick = "this.nextElementSibling.classList.toggle(&quot;hidden&quot;);this.classList.toggle(&quot;rotated&quot;)"
 
