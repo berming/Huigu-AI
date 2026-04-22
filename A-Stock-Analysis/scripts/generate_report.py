@@ -1380,7 +1380,7 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
         br_items = []
         for name, info in breadth.items():
             up = info["up_days"]; dn = info["total_days"] - up
-            bars = "🟢" * up + "🔴" * dn
+            bars = "🔴" * up + "🟢" * dn
             br_items.append("<div class='br-item'><strong>" + name + "</strong>：" + bars + "（" + str(up) + "涨/" + str(dn) + "跌 · 均幅 " + ("{:+.2f}".format(info["recent_avg"])) + "%）</div>")
         report_html += ("<div class='rpt-card'>"
                        "<div class='rpt-sec'>二、市场节奏（近5日涨跌）</div>"
@@ -1399,8 +1399,8 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
                                "<td>" + ("{:+.2f}".format(s["change"])) + "</td>"
                                "<td>" + ("%.2f" % s.get("ma5", 0)) + "</td>"
                                "<td>" + ("%.2f" % s.get("ma10", 0)) + "</td>"
-                               "<td>" + ("%.1f" % s["pct_from_high"]) + "%</td>"
-                               "<td>" + ("{:+.1f}".format(s["pct_from_low"])) + "%</td>"
+                               "<td>" + ("%.1f" % (s.get("pct_from_high") or 0)) + "%</td>"
+                               "<td>" + ("{:+.1f}".format(s.get("pct_from_low") or 0)) + "%</td>"
                                "</tr>")
         strong = max(valid, key=lambda x: x["pctChg"])
         weak = min(valid, key=lambda x: x["pctChg"])
