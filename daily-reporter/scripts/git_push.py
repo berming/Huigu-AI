@@ -57,6 +57,9 @@ ROOT_INDEX_FILE  = "index.html"                  # GitHub Pages 首页
 # 自动生成、允许被本脚本 commit 的根目录文件（只接受精确匹配的文件名）
 AUTO_ROOT_FILES  = (ROOT_INDEX_FILE,)
 
+# 其它项目的目录——忽略它们的 dirty 状态，不 commit 也不因它们拒绝
+IGNORED_PATHSPECS = ("A-Stock-Analysis/", "StockAnalysis/")
+
 # ── 命令超时（秒） ─────────────────────────────────────────
 # 本地 git 命令 60s 足够。
 # 网络命令（fetch/push）——历史上出现过 `git push` 180s 完全无输出
@@ -243,6 +246,9 @@ def ensure_on_main_clean(repo_root: Path):
         if path.startswith(REPORTS_PATHSPEC):
             continue
         if path in AUTO_ROOT_FILES:
+            continue
+        # 忽略：其它项目的目录（它们有自己的 commit 流程）
+        if any(path.startswith(p) for p in IGNORED_PATHSPECS):
             continue
         unrelated.append(path)
     if unrelated:
