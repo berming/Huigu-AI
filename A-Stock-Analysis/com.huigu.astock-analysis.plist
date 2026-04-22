@@ -1,13 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  A-Stock-Analysis 定时任务配置
+  安装：bash A-Stock-Analysis/scripts/setup.sh
+  卸载：launchctl unload ~/Library/LaunchAgents/com.huigu.astock-analysis.plist
+  手动触发：launchctl start com.huigu.astock-analysis
+  查看日志：tail -f A-Stock-Analysis/logs/launchd.log
+-->
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.huigu.astock-analysis</string>
-  <key>ProgramArguments</key><array>
-    <string>/usr/bin/python3</string>
+  <key>Label</key>
+  <string>com.huigu.astock-analysis</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <!-- setup.sh 会用 `which python3` 替换为实际路径 -->
+    <string>{{PYTHON3}}</string>
     <string>{{SCRIPT_DIR}}/run_daily.py</string>
   </array>
-  <key>WorkingDirectory</key><string>{{SCRIPT_DIR}}</string>
+
+  <key>WorkingDirectory</key>
+  <string>{{SCRIPT_DIR}}</string>
+
+  <!-- 每日 3 次触发：早市 07:30 / 午市 12:10 / 晚市 17:00 -->
   <key>StartCalendarInterval</key>
   <array>
     <dict>
@@ -23,12 +38,26 @@
       <key>Minute</key><integer>0</integer>
     </dict>
   </array>
-  <key>WatchPaths</key>
-  <array>
-    <string>{{REPO_DIR}}/.git</string>
-  </array>
-  <key>RunAtLoad</key><false/>
-  <key>StandardOutPath</key><string>{{SCRIPT_DIR}}/logs/launchd.log</string>
-  <key>StandardErrorPath</key><string>{{SCRIPT_DIR}}/logs/launchd.err.log</string>
+
+  <!-- 环境变量：PATH 含 homebrew + git，LANG 防止编码问题 -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>LANG</key>
+    <string>zh_CN.UTF-8</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- 失败后至少间隔 3600s 才重试（防止连续崩溃狂刷） -->
+  <key>ThrottleInterval</key>
+  <integer>3600</integer>
+
+  <key>StandardOutPath</key>
+  <string>{{BASE_DIR}}/logs/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{BASE_DIR}}/logs/launchd.err.log</string>
 </dict>
 </plist>
