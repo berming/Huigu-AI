@@ -1357,12 +1357,11 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
     idx_rows_html = ""
     for idx in indices:
         a = "▲" if idx["pctChg"] > 0 else "▼" if idx["pctChg"] < 0 else "―"
-        s = "+" if idx["pctChg"] > 0 else ""
         pct_cls = "up" if idx["pctChg"] > 0 else ("dn" if idx["pctChg"] < 0 else "nt")
         idx_rows_html += ("<tr><td>" + idx["name"] + "</td><td>" + idx["code"] + "</td>"
                          "<td>" + ("{:,.2f}".format(idx["close"])) + "</td>"
-                         "<td class='" + pct_cls + "'>" + a + " " + s + ("{:+.2f}".format(idx["pctChg"])) + "%</td>"
-                         "<td>" + ("%+ .2f" % idx["change"]) + "</td>"
+                         "<td class='" + pct_cls + "'>" + a + " " + ("{:+.2f}".format(idx["pctChg"])) + "%</td>"
+                         "<td>" + ("{:+.2f}".format(idx["change"])) + "</td>"
                          "<td>" + ("{:,.2f}".format(idx["high"])) + "</td>"
                          "<td>" + ("{:,.2f}".format(idx["low"])) + "</td>"
                          "<td>" + fmt_vol(idx["volume"]) + "</td>"
@@ -1370,9 +1369,10 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
 
     report_html += ("<div class='rpt-card'>"
                     "<div class='rpt-sec'>一、主要指数</div>"
+                    "<div class='rpt-tbl-wrap'>"
                     "<table class='rpt-tbl'>"
                     "<thead><tr><th>指数</th><th>代码</th><th>收盘点位</th><th>涨跌幅</th><th>涨跌额</th><th>最高</th><th>最低</th><th>成交量</th><th>成交额</th></tr></thead>"
-                    "<tbody>" + idx_rows_html + "</tbody></table>"
+                    "<tbody>" + idx_rows_html + "</tbody></table></div>"
                     "<div class='rpt-src'>数据来源：Baostock · 仅供参考，不构成投资建议</div></div>")
 
     # Section 3: Market Breadth
@@ -1391,12 +1391,11 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
     if valid:
         for s in valid:
             a = "▲" if s["pctChg"] > 0 else "▼" if s["pctChg"] < 0 else "―"
-            sp = "+" if s["pctChg"] > 0 else ""
             pct_cls = "up" if s["pctChg"] > 0 else ("dn" if s["pctChg"] < 0 else "nt")
             stock_rows_html += ("<tr>"
                                "<td>" + s["name"] + "</td><td>" + s["code"] + "</td><td>" + s["tag"] + "</td>"
                                "<td>" + ("%.2f" % s["close"]) + "</td>"
-                               "<td class='" + pct_cls + "'>" + a + " " + sp + ("{:+.2f}".format(s["pctChg"])) + "%</td>"
+                               "<td class='" + pct_cls + "'>" + a + " " + ("{:+.2f}".format(s["pctChg"])) + "%</td>"
                                "<td>" + ("{:+.2f}".format(s["change"])) + "</td>"
                                "<td>" + ("%.2f" % s.get("ma5", 0)) + "</td>"
                                "<td>" + ("%.2f" % s.get("ma10", 0)) + "</td>"
@@ -1414,9 +1413,10 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
 
     report_html += ("<div class='rpt-card'>"
                     "<div class='rpt-sec'>三、自选个股</div>"
+                    "<div class='rpt-tbl-wrap'>"
                     "<table class='rpt-tbl'>"
                     "<thead><tr><th>股票</th><th>代码</th><th>业务</th><th>收盘价</th><th>涨跌幅</th><th>涨跌额</th><th>MA5</th><th>MA10</th><th>距高点</th><th>距低点</th></tr></thead>"
-                    "<tbody>" + stock_rows_html + "</tbody></table>"
+                    "<tbody>" + stock_rows_html + "</tbody></table></div>"
                     "<div class='rpt-note'>" + stock_note + "</div></div>")
 
     # Section 5: Trends Analysis
@@ -1528,34 +1528,86 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
 <title>{title_name} · {date_str}</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;color:#0f172a;padding:20px;line-height:1.5}}
+body{{font-family:'PingFang SC','Noto Sans SC',-apple-system,sans-serif;background:#f1f5f9;color:#0f172a;padding:16px 12px;line-height:1.5}}
 .w{{max-width:980px;margin:0 auto}}
-.hd{{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px}}
-.ht{{font-size:22px;font-weight:700}}
+
+/* ── 页头 ─────────────────────────────────── */
+.hd{{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}}
+.ht{{font-size:20px;font-weight:700}}
 .hs{{font-size:11px;color:#94a3b8;margin-top:4px}}
-.bdg{{font-size:10px;padding:4px 13px;border-radius:20px;font-weight:600;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe}}
+.bdg{{font-size:10px;padding:4px 13px;border-radius:20px;font-weight:600;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;white-space:nowrap}}
+
+/* ── 章节标题 ─────────────────────────────── */
 .sec{{font-size:10px;font-weight:700;letter-spacing:3px;color:#94a3b8;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}}
+
+/* ── A股配色 红涨绿跌 ─────────────────────── */
 .up{{color:#dc2626}}.dn{{color:#16a34a}}.nt{{color:#64748b}}
+
+/* ── 报告卡片（.rpt-card）通用容器 ─────────── */
+.rpt-card{{background:#fff;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.04);margin-bottom:14px;padding:16px 18px;overflow:hidden}}
+.rpt-card.rpt-header{{background:linear-gradient(135deg,#fafbfc,#fff);border-left:4px solid #3b82f6}}
+.rpt-card.rpt-chart-sec{{padding:10px 18px;background:#fafbfc}}
+
+.rpt-title{{font-size:16px;font-weight:700;color:#0f172a;margin-bottom:10px}}
+.rpt-sec{{font-size:12px;font-weight:700;color:#475569;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #f1f5f9}}
+.rpt-meta{{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:#64748b;line-height:1.8}}
+.rpt-meta span{{display:inline-flex;align-items:center;gap:3px}}
+.rpt-meta strong{{color:#0f172a;font-weight:700}}
+.rpt-src{{font-size:10px;color:#94a3b8;margin-top:10px;padding-top:8px;border-top:1px dashed #f1f5f9;text-align:right}}
+.rpt-note{{font-size:12px;color:#475569;margin-top:10px;padding:8px 12px;background:#f8fafc;border-radius:6px;line-height:1.6}}
+.rpt-summary{{font-size:13px;color:#334155;line-height:1.8}}
+
+/* ── 报告表格 ─────────────────────────────── */
+.rpt-tbl-wrap{{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -18px;padding:0 18px}}
+.rpt-tbl{{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}}
+.rpt-tbl th{{text-align:left;padding:6px 8px;color:#94a3b8;font-weight:600;font-size:10px;border-bottom:2px solid #e2e8f0;letter-spacing:.5px}}
+.rpt-tbl td{{padding:8px 8px;border-bottom:1px solid #f1f5f9;color:#334155}}
+.rpt-tbl td:nth-child(n+3){{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}}
+.rpt-tbl tbody tr:hover{{background:#fafbfc}}
+
+/* ── 趋势分析列表 ─────────────────────────── */
+.rpt-ana{{list-style:none;padding:0;margin:0}}
+.rpt-ana li{{font-size:12px;color:#475569;line-height:1.8;padding:6px 0;border-bottom:1px solid #f8fafc}}
+.rpt-ana li:last-child{{border-bottom:none}}
+
+/* ── 市场节奏（breadth） ──────────────────── */
+.rpt-breadth{{display:flex;flex-direction:column;gap:8px}}
+.br-item{{font-size:12px;color:#475569;line-height:1.6;padding:6px 10px;background:#f8fafc;border-radius:6px}}
+.br-item strong{{color:#0f172a}}
+
+/* ── 情绪 / 信号标签 ─────────────────────── */
+.sentiment-items{{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}}
+.sig-tag{{display:inline-block;font-size:10px;padding:3px 8px;border-radius:10px;font-weight:500;background:#f1f5f9;color:#475569}}
+.mkt-context{{font-size:12px;color:#64748b;margin-top:8px;line-height:1.6}}
+.mkt-label{{font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:1px;margin-bottom:4px}}
+
+/* ── 新浪实时指数格 ──────────────────────── */
 .idx-row{{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:8px}}
-.idx{{background:#fff;border-radius:8px;padding:12px 14px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,.04)}}
-.idx .n{{font-size:10px;color:#94a3b8;margin-bottom:4px;font-weight:500}}
-.idx .v{{font-size:17px;font-weight:700}}
-.idx .c{{font-size:11px;margin-top:3px;font-weight:600}}
+.idx{{background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,.04)}}
+.idx .n{{font-size:10px;color:#94a3b8;margin-bottom:3px;font-weight:500}}
+.idx .v{{font-size:15px;font-weight:700}}
+.idx .c{{font-size:11px;margin-top:2px;font-weight:600}}
+
+/* ── 个股卡片 ─────────────────────────────── */
 .sc{{background:#fff;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px;overflow:hidden}}
 .sc-header{{display:flex;align-items:center;gap:12px;padding:14px 18px 12px;flex-wrap:wrap}}
 .sn{{font-size:16px;font-weight:700}}
 .sk{{font-size:10px;color:#94a3b8;margin-top:2px}}
 .stag{{font-size:10px;padding:3px 10px;border-radius:20px;font-weight:500;white-space:nowrap}}
 .sc-price{{margin-left:auto;text-align:right}}
-.price-val{{font-size:20px;font-weight:700}}
+.price-val{{font-size:18px;font-weight:700}}
 .price-chg{{font-size:12px;margin-top:3px}}
 .ths-badge{{font-size:9px;color:#7c3aed;background:#ede9fe;padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle}}
+
+/* ── 图表区 单列 ──────────────────────────── */
 .charts-row{{display:block;border-top:1px solid #f1f5f9}}
 .chart-cell{{padding:14px 18px}}
-.chart-cell + .chart-cell{{border-top:1px solid #f1f5f9}}
+.chart-cell+.chart-cell{{border-top:1px solid #f1f5f9}}
 .chart-label{{font-size:11px;font-weight:600;color:#64748b;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}}
 .chart-label span{{font-size:9px;color:#94a3b8;font-weight:400}}
-.chart-img{{width:100%;height:auto;min-height:140px;max-height:360px;border-radius:6px;display:block;object-fit:contain;background:#f8fafc}}
+.chart-img{{width:100%;height:auto;min-height:120px;max-height:360px;border-radius:6px;display:block;object-fit:contain;background:#f8fafc}}
+
+/* ── 主力资金 ─────────────────────────────── */
 .cf-wrap{{border-top:1px solid #f1f5f9;padding:14px 18px;background:#fdfdfe}}
 .cf-header{{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px}}
 .cf-title{{font-size:11px;font-weight:700;color:#475569;letter-spacing:1px}}
@@ -1573,11 +1625,65 @@ body{{font-family:'PingFang SC','Noto Sans SC',sans-serif;background:#f1f5f9;col
 .cf-item{{display:flex;flex-direction:column;gap:2px;font-size:11px}}
 .cf-k{{font-size:9px;color:#64748b}}
 .cf-svg{{width:100%;height:auto;display:block;border:1px solid #e2e8f0;border-radius:6px;background:#fafbfc}}
+
+/* ── 深度分析 ─────────────────────────────── */
+.depth-section{{border-top:1px solid #f1f5f9;padding:12px 18px;background:#fafdff}}
+.depth-toggle{{font-size:12px;font-weight:600;color:#3b82f6;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;padding:4px 0}}
+.depth-toggle-icon{{font-size:10px;transition:transform .2s;display:inline-block}}
+.depth-toggle.rotated .depth-toggle-icon{{transform:rotate(90deg)}}
+.depth-body.hidden{{display:none}}
+.depth-cols{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}}
+.depth-col{{min-width:0}}
+.depth-sub-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin-bottom:6px}}
+.da-row{{display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap}}
+.da-cell{{flex:1;min-width:0}}
+.da-tag{{display:inline-block;font-size:10px;padding:3px 7px;border-radius:4px;background:#f1f5f9;color:#475569;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}}
+.da-tag.up{{background:#fef2f2;color:#dc2626}}.da-tag.dn{{background:#f0fdf4;color:#16a34a}}
+.da-tag.ovb{{background:#fef2f2;color:#b91c1c}}.da-tag.ovs{{background:#f0fdf4;color:#15803d}}
+.da-tag.str{{background:#eff6ff;color:#1d4ed8}}.da-tag.wkr{{background:#fff7ed;color:#c2410c}}
+.da-tag.neu{{background:#f8fafc;color:#64748b}}
+.ev-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin:10px 0 6px}}
+.ev-list{{list-style:none;padding:0;margin:0}}
+.ev-list li{{font-size:11px;color:#475569;line-height:1.6;padding:3px 0;border-bottom:1px solid #f1f5f9}}
+.ev-list li:last-child{{border-bottom:none}}
+.da-verdict{{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9}}
+.verdict-label{{font-size:11px;font-weight:600;color:#475569}}
+.verdict-score{{font-weight:700;font-size:12px}}
+
+/* ── 技术图表 ─────────────────────────────── */
+.tc-row{{display:flex;flex-direction:column;gap:8px;margin:10px 0 0}}
+.tc{{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}}
+.tc-label{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:.5px;margin-bottom:4px}}
+.tc-img{{width:100%;height:auto;display:block;border-radius:4px}}
+.tech-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}}
+
+/* ── 要闻 / 免责 ─────────────────────────── */
 .news{{background:#fff;border-radius:10px;border:1px solid #e2e8f0;padding:14px 18px}}
 .news ul{{padding-left:18px}}
 .news li{{font-size:12px;color:#475569;line-height:2;border-bottom:1px solid #f8fafc;padding:2px 0}}
 .news li:last-child{{border-bottom:none}}
-.disc{{font-size:10px;color:#94a3b8;padding:10px 14px;background:#fff;border-radius:8px;text-align:center;margin-top:14px;line-height:1.7;border:1px solid #e2e8f0}}.depth-section{{border-top:1px solid #f1f5f9;padding:12px 18px;background:#fafdff}}.depth-toggle{{font-size:12px;font-weight:600;color:#3b82f6;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;padding:4px 0}}.depth-toggle-icon{{font-size:10px;transition:transform .2s;display:inline-block}}.depth-toggle.rotated .depth-toggle-icon{{transform:rotate(90deg)}}.depth-body.hidden{{display:none}}.depth-cols{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}}.depth-sub-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin-bottom:6px}}.da-row{{display:flex;gap:6px;margin-bottom:4px}}.da-cell{{flex:1;min-width:0}}.da-tag{{display:inline-block;font-size:10px;padding:3px 7px;border-radius:4px;background:#f1f5f9;color:#475569;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}}.da-tag.up{{background:#fef2f2;color:#dc2626}}.da-tag.dn{{background:#f0fdf4;color:#16a34a}}.da-tag.ovb{{background:#fef2f2;color:#b91c1c}}.da-tag.ovs{{background:#f0fdf4;color:#15803d}}.da-tag.str{{background:#eff6ff;color:#1d4ed8}}.da-tag.wkr{{background:#fff7ed;color:#c2410c}}.da-tag.neu{{background:#f8fafc;color:#64748b}}.ev-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin:10px 0 6px}}.ev-list{{list-style:none;padding:0;margin:0}}.ev-list li{{font-size:11px;color:#475569;line-height:1.6;padding:3px 0;border-bottom:1px solid #f1f5f9}}.ev-list li:last-child{{border-bottom:none}}.da-verdict{{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9}}.verdict-label{{font-size:11px;font-weight:600;color:#475569}}.verdict-score{{font-weight:700;font-size:12px}}.tc-row{{display:flex;flex-direction:column;gap:8px;margin:10px 0 0}}.tc{{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}}.tc-label{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:.5px;margin-bottom:4px}}.tc-img{{width:100%;height:auto;display:block;border-radius:4px}}
+.disc{{font-size:10px;color:#94a3b8;padding:10px 14px;background:#fff;border-radius:8px;text-align:center;margin-top:14px;line-height:1.7;border:1px solid #e2e8f0}}
+
+/* ── 移动端响应式 ─────────────────────────── */
+@media(max-width:768px){{
+  body{{padding:12px 8px}}
+  .rpt-card{{padding:12px 14px}}
+  .idx-row{{grid-template-columns:repeat(3,1fr)}}
+  .cf-kpis{{grid-template-columns:repeat(2,1fr)}}
+  .cf-bd-row{{grid-template-columns:repeat(2,1fr)}}
+  .depth-cols{{grid-template-columns:1fr}}
+  .tech-grid{{grid-template-columns:repeat(2,1fr)}}
+}}
+@media(max-width:480px){{
+  .ht{{font-size:18px}}
+  .idx-row{{grid-template-columns:repeat(2,1fr)}}
+  .sc-header{{gap:8px}}
+  .price-val{{font-size:16px}}
+  .rpt-tbl{{font-size:11px}}
+  .rpt-tbl th,.rpt-tbl td{{padding:5px 4px}}
+  .rpt-meta{{font-size:10px}}
+  .depth-toggle{{font-size:11px}}
+}}
 </style>
 </head>
 <body>
