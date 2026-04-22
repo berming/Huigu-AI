@@ -1711,54 +1711,105 @@ body{{font-family:'PingFang SC','Noto Sans SC',-apple-system,sans-serif;backgrou
 # 11. GitHub Pages 索引页
 # ─────────────────────────────────────────────
 def generate_index_html(report_dir, out_path):
+    """生成 GitHub Pages 根索引页，统一展示所有来源的报告。"""
     WEEKDAYS = ["周一","周二","周三","周四","周五","周六","周日"]
     html_pat = re.compile(r'^astock_(\d{4})(\d{2})(\d{2})_(\d{4})\.html$')
     md_pat   = re.compile(r'^stock_report_(\d{8})_([早午晚])\.md$')
 
-    entries = []
-    for p in sorted(report_dir.glob("astock_*.html")):
-        m = html_pat.match(p.name)
-        if not m: continue
-        try:
-            dt = datetime.datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)[:2]), int(m.group(4)[2:]))
-        except Exception: continue
-        entries.append({"name": p.name, "dt": dt, "date_key": f"{m.group(1)}-{m.group(2)}-{m.group(3)}", "is_noon": dt.hour < 15})
+    # 扫描多个报告目录（当前项目 + daily-reporter）
+    repo_root = report_dir.parent.parent if report_dir.name == "reports" else report_dir.parent
+    report_sources = [
+        (repo_root / "A-Stock-Analysis" / "reports", "A-Stock-Analysis/reports", "深度版", "badge-asa"),
+        (repo_root / "daily-reporter"   / "reports", "daily-reporter/reports",   "简版",   "badge-dr"),
+    ]
 
+    entries = []
     md_entries = []
-    for p in sorted(report_dir.glob("stock_report_*.md")):
-        m = md_pat.match(p.name)
-        if not m: continue
-        try:
-            dt = datetime.datetime(int(m.group(1)[:4]), int(m.group(1)[4:6]), int(m.group(1)[6:]))
-        except Exception: continue
-        md_entries.append({"name": p.name, "dt": dt, "date_key": m.group(1), "session": m.group(2)})
+    for src_dir, href_prefix, label, badge_cls in report_sources:
+        if not src_dir.is_dir():
+            continue
+        for p in sorted(src_dir.glob("astock_*.html")):
+            m = html_pat.match(p.name)
+            if not m:
+                continue
+            try:
+                dt = datetime.datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)[:2]), int(m.group(4)[2:]))
+            except Exception:
+                continue
+            is_noon = dt.hour < 15
+            entries.append({
+                "name": p.name, "dt": dt,
+                "date_key": f"{m.group(1)}-{m.group(2)}-{m.group(3)}",
+                "is_noon": is_noon,
+                "href": f"{href_prefix}/{p.name}",
+                "source_label": label,
+                "source_cls": badge_cls,
+            })
+        for p in sorted(src_dir.glob("stock_report_*.md")):
+            m = md_pat.match(p.name)
+            if not m:
+                continue
+            try:
+                dt = datetime.datetime(int(m.group(1)[:4]), int(m.group(1)[4:6]), int(m.group(1)[6:]))
+            except Exception:
+                continue
+            md_entries.append({
+                "name": p.name, "dt": dt,
+                "date_key": m.group(1), "session": m.group(2),
+                "href": f"{href_prefix}/{p.name}",
+            })
 
     entries.sort(key=lambda e: e["dt"], reverse=True)
     md_entries.sort(key=lambda e: e["dt"], reverse=True)
 
+    # 按日期分组渲染 HTML 报告列表
     groups_html = ""
     if entries:
-        current = None
+        current_key = None
         for e in entries:
-            if not current or current[0] != e["date_key"]:
+            if current_key != e["date_key"]:
+                if current_key is not None:
+                    groups_html += "</div>\n"
                 label = f"{e['dt'].year}年{e['dt'].month}月{e['dt'].day}日 · {WEEKDAYS[e['dt'].weekday()]}"
-                current = (e["date_key"], label, [])
-                groups_html += f'<div class="date-group"><div class="date-header">{label.split(" · ")[0]}<span class="wd"> · {label.split(" · ")[1]}</span></div>\n'
-            badge = "badge-noon" if e["is_noon"] else "badge-daily"
-            badge_txt = "午间" if e["is_noon"] else "每日收盘"
-            groups_html += f'  <a class="report-link" href="A-Stock-Analysis/reports/{e["name"]}"><span class="badge {badge}">{badge_txt}</span><span class="time">{e["dt"].strftime("%H:%M")}</span><span class="fname">{e["name"]}</span><span class="arrow">›</span></a>\n'
+                main_label, _, wd = label.partition(" · ")
+                groups_html += f'<div class="date-group"><div class="date-header">{main_label}<span class="wd"> · {wd}</span></div>\n'
+                current_key = e["date_key"]
+            session_badge = "badge-noon" if e["is_noon"] else "badge-daily"
+            session_txt   = "午间" if e["is_noon"] else "每日收盘"
+            groups_html += (
+                f'  <a class="report-link" href="{e["href"]}">'
+                f'<span class="badge {session_badge}">{session_txt}</span>'
+                f'<span class="badge {e["source_cls"]}">{e["source_label"]}</span>'
+                f'<span class="time">{e["dt"].strftime("%H:%M")}</span>'
+                f'<span class="fname">{e["name"]}</span>'
+                f'<span class="arrow">›</span></a>\n'
+            )
         groups_html += "</div>\n"
 
+    # Markdown 报告
     md_groups_html = ""
     if md_entries:
-        current = None
+        current_key = None
         for e in md_entries:
-            if not current or current[0] != e["date_key"]:
-                label = f"{e['dt'].year}年{e['dt'].month}月{e['dt'].day}日 · {WEEKDAYS[e['dt'].weekday()]}"
-                current = (e["date_key"], label, [])
-                md_groups_html += f'<div class="date-group"><div class="date-header">{label.split(" · ")[0]}<span class="wd"> · {label.split(" · ")[1]}</span></div>\n'
-            session_map = {"早": "早盘","午":"午盘","晚":"收盘"}
-            md_groups_html += f'  <a class="report-link" href="A-Stock-Analysis/reports/{e["name"]}"><span class="badge badge-md">{session_map.get(e["session"],e["session"])}</span><span class="time">{e["dt"].strftime("%H:%M")}</span><span class="fname">{e["name"]}</span><span class="arrow">›</span></a>\n'
+            if current_key != e["date_key"]:
+                if current_key is not None:
+                    md_groups_html += "</div>\n"
+                try:
+                    d = datetime.date(int(e["date_key"][:4]), int(e["date_key"][4:6]), int(e["date_key"][6:]))
+                    label = f"{d.year}年{d.month}月{d.day}日 · {WEEKDAYS[d.weekday()]}"
+                except Exception:
+                    label = e["date_key"]
+                main_label, _, wd = label.partition(" · ")
+                md_groups_html += f'<div class="date-group"><div class="date-header">{main_label}<span class="wd"> · {wd}</span></div>\n'
+                current_key = e["date_key"]
+            session_map = {"早": "早盘", "午": "午盘", "晚": "收盘"}
+            md_groups_html += (
+                f'  <a class="report-link" href="{e["href"]}">'
+                f'<span class="badge badge-md">{session_map.get(e.get("session",""),e.get("session",""))}</span>'
+                f'<span class="time">{e["dt"].strftime("%H:%M")}</span>'
+                f'<span class="fname">{e["name"]}</span>'
+                f'<span class="arrow">›</span></a>\n'
+            )
         md_groups_html += "</div>\n"
 
     total = len(entries)
@@ -1769,55 +1820,70 @@ def generate_index_html(report_dir, out_path):
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
 <title>慧股AI · A股报告存档</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}}
-body{{font-family:-apple-system,'PingFang SC','Noto Sans SC',sans-serif;color:#0f172a;padding:18px 14px 28px;max-width:720px;margin:0 auto;background:#f1f5f9}}
+html,body{{background:#f1f5f9}}
+body{{font-family:-apple-system,'PingFang SC','Noto Sans SC','Helvetica Neue',sans-serif;
+     color:#0f172a;padding:18px 14px 28px;line-height:1.5;max-width:720px;margin:0 auto}}
 .header{{text-align:center;margin-bottom:18px;padding:6px 0}}
-.header h1{{font-size:22px;font-weight:700}}
+.header h1{{font-size:22px;font-weight:700;letter-spacing:-0.3px}}
 .subtitle{{font-size:12px;color:#94a3b8;margin-top:6px}}
 .count{{font-size:11px;color:#64748b;margin-top:10px}}
 .count strong{{color:#0f172a;font-weight:700}}
-.date-group{{background:#fff;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.04);margin-bottom:14px;overflow:hidden}}
-.date-header{{padding:14px 18px 10px;font-size:14px;font-weight:700;border-bottom:1px solid #f1f5f9;background:linear-gradient(to bottom,#fafbfc,#fff)}}
+.date-group{{background:#fff;border-radius:12px;border:1px solid #e2e8f0;
+             box-shadow:0 1px 4px rgba(0,0,0,.04);margin-bottom:14px;overflow:hidden}}
+.date-header{{padding:14px 18px 10px;font-size:14px;font-weight:700;
+              border-bottom:1px solid #f1f5f9;background:linear-gradient(to bottom,#fafbfc,#fff)}}
 .date-header .wd{{font-size:11px;color:#94a3b8;font-weight:500;margin-left:4px}}
-a.report-link{{display:flex;align-items:center;gap:12px;padding:14px 18px;font-size:14px;color:#0f172a;text-decoration:none;border-bottom:1px solid #f8fafc;min-height:52px;transition:background .1s}}
+a.report-link{{display:flex;align-items:center;gap:8px;
+               padding:14px 18px;font-size:14px;color:#0f172a;
+               text-decoration:none;border-bottom:1px solid #f8fafc;
+               min-height:52px;transition:background .1s;flex-wrap:wrap}}
 a.report-link:last-child{{border-bottom:none}}
 a.report-link:hover,a.report-link:active{{background:#f8fafc}}
-.badge{{display:inline-block;padding:3px 10px;border-radius:14px;font-size:10px;font-weight:600;white-space:nowrap}}
+.badge{{display:inline-block;padding:3px 10px;border-radius:14px;
+        font-size:10px;font-weight:600;white-space:nowrap;letter-spacing:.3px}}
 .badge-noon{{background:#fef3c7;color:#a16207;border:1px solid #fde68a}}
 .badge-daily{{background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe}}
 .badge-md{{background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe}}
-.time{{font-size:13px;color:#475569;font-weight:500;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}}
-.fname{{font-size:10px;color:#94a3b8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-left:2px}}
+.badge-asa{{background:#fce7f3;color:#9d174d;border:1px solid #fbcfe8;font-size:9px;padding:2px 7px}}
+.badge-dr{{background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;font-size:9px;padding:2px 7px}}
+.time{{font-size:13px;color:#475569;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:500}}
+.fname{{font-size:10px;color:#94a3b8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}}
 .arrow{{margin-left:auto;color:#cbd5e1;font-size:20px;font-weight:300}}
-.empty{{text-align:center;color:#94a3b8;font-size:13px;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid #e2e8f0}}
-.footer{{text-align:center;font-size:10px;color:#94a3b8;margin-top:22px;padding-top:14px;border-top:1px solid #e2e8f0;line-height:1.8}}
+.empty{{text-align:center;color:#94a3b8;font-size:13px;padding:40px 20px;
+        background:#fff;border-radius:12px;border:1px solid #e2e8f0}}
+.footer{{text-align:center;font-size:10px;color:#94a3b8;margin-top:22px;
+         padding-top:14px;border-top:1px solid #e2e8f0;line-height:1.8}}
 .footer a{{color:#64748b;text-decoration:none}}
 .footer a:hover{{color:#0f172a}}
+@media(max-width:480px){{
+  body{{padding:14px 10px 24px}}
+  .header h1{{font-size:20px}}
+  a.report-link{{padding:14px 14px;gap:6px}}
+  .date-header{{padding:12px 14px 8px}}
+}}
 </style>
 </head>
 <body>
 <div class="header">
   <h1>📊 慧股AI · A股报告存档</h1>
-  <div class="subtitle">每交易日 早市（08:30）/ 午市（12:30）/ 晚市（19:30）自动更新</div>
+  <div class="subtitle">每交易日自动更新 · 深度版（A-Stock-Analysis）+ 简版（daily-reporter）</div>
   <div class="count">共 <strong>{total}</strong> 份 HTML 报告 · 最近更新 {latest} BJ</div>
 </div>
-{groups_html}
-<div class="header" style="margin-top:28px">
-  <h1 style="font-size:18px">📝 Markdown 报告</h1>
-</div>
-{md_groups_html}
+{groups_html if groups_html else '<div class="empty">暂无报告</div>'}
+{"<div class='header' style='margin-top:28px'><h1 style='font-size:18px'>📝 Markdown 报告</h1></div>" + md_groups_html if md_groups_html else ""}
 <div class="footer">
-  由 <a href="https://github.com/berming/Huigu-AI">berming/Huigu-AI</a>
-  · A-Stock-Analysis 自动生成<br>
+  由 <a href="https://github.com/berming/Huigu-AI">berming/Huigu-AI</a> 自动生成<br>
   索引刷新于 {build_time} BJ · 仅供参考，不构成投资建议
 </div>
 </body>
 </html>"""
     out_path.write_text(index_html, encoding="utf-8")
-    log.info(f"✅ 索引页已更新: {out_path}")
+    log.info(f"✅ 索引页已更新: {out_path} ({total} 份报告)")
 
 # ─────────────────────────────────────────────
 # 主流程
