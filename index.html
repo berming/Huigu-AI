@@ -2,77 +2,121 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
 <title>慧股AI · A股报告存档</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,'PingFang SC','Noto Sans SC',sans-serif;color:#0f172a;padding:18px 14px 28px;max-width:720px;margin:0 auto;background:#f1f5f9}
+html,body{background:#f1f5f9}
+body{font-family:-apple-system,'PingFang SC','Noto Sans SC','Helvetica Neue',sans-serif;
+     color:#0f172a;padding:18px 14px 28px;line-height:1.5;max-width:720px;margin:0 auto}
 .header{text-align:center;margin-bottom:18px;padding:6px 0}
-.header h1{font-size:22px;font-weight:700}
+.header h1{font-size:22px;font-weight:700;letter-spacing:-0.3px}
 .subtitle{font-size:12px;color:#94a3b8;margin-top:6px}
 .count{font-size:11px;color:#64748b;margin-top:10px}
 .count strong{color:#0f172a;font-weight:700}
-.date-group{background:#fff;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.04);margin-bottom:14px;overflow:hidden}
-.date-header{padding:14px 18px 10px;font-size:14px;font-weight:700;border-bottom:1px solid #f1f5f9;background:linear-gradient(to bottom,#fafbfc,#fff)}
+.date-group{background:#fff;border-radius:12px;border:1px solid #e2e8f0;
+             box-shadow:0 1px 4px rgba(0,0,0,.04);margin-bottom:14px;overflow:hidden}
+.date-header{padding:14px 18px 10px;font-size:14px;font-weight:700;
+              border-bottom:1px solid #f1f5f9;background:linear-gradient(to bottom,#fafbfc,#fff)}
 .date-header .wd{font-size:11px;color:#94a3b8;font-weight:500;margin-left:4px}
-a.report-link{display:flex;align-items:center;gap:12px;padding:14px 18px;font-size:14px;color:#0f172a;text-decoration:none;border-bottom:1px solid #f8fafc;min-height:52px;transition:background .1s}
+a.report-link{display:flex;align-items:center;gap:8px;
+               padding:14px 18px;font-size:14px;color:#0f172a;
+               text-decoration:none;border-bottom:1px solid #f8fafc;
+               min-height:52px;transition:background .1s;flex-wrap:wrap}
 a.report-link:last-child{border-bottom:none}
 a.report-link:hover,a.report-link:active{background:#f8fafc}
-.badge{display:inline-block;padding:3px 10px;border-radius:14px;font-size:10px;font-weight:600;white-space:nowrap}
+.badge{display:inline-block;padding:3px 10px;border-radius:14px;
+        font-size:10px;font-weight:600;white-space:nowrap;letter-spacing:.3px}
 .badge-noon{background:#fef3c7;color:#a16207;border:1px solid #fde68a}
 .badge-daily{background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe}
 .badge-md{background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe}
-.time{font-size:13px;color:#475569;font-weight:500;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.fname{font-size:10px;color:#94a3b8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-left:2px}
+.badge-asa{background:#fce7f3;color:#9d174d;border:1px solid #fbcfe8;font-size:9px;padding:2px 7px}
+.badge-dr{background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;font-size:9px;padding:2px 7px}
+.time{font-size:13px;color:#475569;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:500}
+.fname{font-size:10px;color:#94a3b8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .arrow{margin-left:auto;color:#cbd5e1;font-size:20px;font-weight:300}
-.empty{text-align:center;color:#94a3b8;font-size:13px;padding:40px 20px;background:#fff;border-radius:12px;border:1px solid #e2e8f0}
-.footer{text-align:center;font-size:10px;color:#94a3b8;margin-top:22px;padding-top:14px;border-top:1px solid #e2e8f0;line-height:1.8}
+.empty{text-align:center;color:#94a3b8;font-size:13px;padding:40px 20px;
+        background:#fff;border-radius:12px;border:1px solid #e2e8f0}
+.footer{text-align:center;font-size:10px;color:#94a3b8;margin-top:22px;
+         padding-top:14px;border-top:1px solid #e2e8f0;line-height:1.8}
 .footer a{color:#64748b;text-decoration:none}
 .footer a:hover{color:#0f172a}
+@media(max-width:480px){
+  body{padding:14px 10px 24px}
+  .header h1{font-size:20px}
+  a.report-link{padding:14px 14px;gap:6px}
+  .date-header{padding:12px 14px 8px}
+}
 </style>
 </head>
 <body>
 <div class="header">
   <h1>📊 慧股AI · A股报告存档</h1>
-  <div class="subtitle">每交易日 早市（08:30）/ 午市（12:30）/ 晚市（19:30）自动更新</div>
-  <div class="count">共 <strong>22</strong> 份 HTML 报告 · 最近更新 2026-04-17 18:20 BJ</div>
+  <div class="subtitle">每交易日自动更新 · 深度版（A-Stock-Analysis）+ 简版（daily-reporter）</div>
+  <div class="count">共 <strong>37</strong> 份 HTML 报告 · 最近更新 2026-04-23 01:22 BJ</div>
+</div>
+<div class="date-group"><div class="date-header">2026年4月23日<span class="wd"> · 周四</span></div>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260423_0122.html"><span class="badge badge-noon">午间</span><span class="badge badge-asa">深度版</span><span class="time">01:22</span><span class="fname">astock_20260423_0122.html</span><span class="arrow">›</span></a>
+</div>
+<div class="date-group"><div class="date-header">2026年4月22日<span class="wd"> · 周三</span></div>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260422_0732.html"><span class="badge badge-noon">午间</span><span class="badge badge-asa">深度版</span><span class="time">07:32</span><span class="fname">astock_20260422_0732.html</span><span class="arrow">›</span></a>
+</div>
+<div class="date-group"><div class="date-header">2026年4月21日<span class="wd"> · 周二</span></div>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260421_2357.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">23:57</span><span class="fname">astock_20260421_2357.html</span><span class="arrow">›</span></a>
 </div>
 <div class="date-group"><div class="date-header">2026年4月17日<span class="wd"> · 周五</span></div>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1820.html"><span class="badge badge-daily">每日收盘</span><span class="time">18:20</span><span class="fname">astock_20260417_1820.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1818.html"><span class="badge badge-daily">每日收盘</span><span class="time">18:18</span><span class="fname">astock_20260417_1818.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1817.html"><span class="badge badge-daily">每日收盘</span><span class="time">18:17</span><span class="fname">astock_20260417_1817.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1815.html"><span class="badge badge-daily">每日收盘</span><span class="time">18:15</span><span class="fname">astock_20260417_1815.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1757.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:57</span><span class="fname">astock_20260417_1757.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1755.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:55</span><span class="fname">astock_20260417_1755.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1750.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:50</span><span class="fname">astock_20260417_1750.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1748.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:48</span><span class="fname">astock_20260417_1748.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1746.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:46</span><span class="fname">astock_20260417_1746.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1744.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:44</span><span class="fname">astock_20260417_1744.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1727.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:27</span><span class="fname">astock_20260417_1727.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1725.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:25</span><span class="fname">astock_20260417_1725.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1709.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:09</span><span class="fname">astock_20260417_1709.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1706.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:06</span><span class="fname">astock_20260417_1706.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1705.html"><span class="badge badge-daily">每日收盘</span><span class="time">17:05</span><span class="fname">astock_20260417_1705.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1646.html"><span class="badge badge-daily">每日收盘</span><span class="time">16:46</span><span class="fname">astock_20260417_1646.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1634.html"><span class="badge badge-daily">每日收盘</span><span class="time">16:34</span><span class="fname">astock_20260417_1634.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1558.html"><span class="badge badge-daily">每日收盘</span><span class="time">15:58</span><span class="fname">astock_20260417_1558.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1553.html"><span class="badge badge-daily">每日收盘</span><span class="time">15:53</span><span class="fname">astock_20260417_1553.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1552.html"><span class="badge badge-daily">每日收盘</span><span class="time">15:52</span><span class="fname">astock_20260417_1552.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1545.html"><span class="badge badge-daily">每日收盘</span><span class="time">15:45</span><span class="fname">astock_20260417_1545.html</span><span class="arrow">›</span></a>
-  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1543.html"><span class="badge badge-daily">每日收盘</span><span class="time">15:43</span><span class="fname">astock_20260417_1543.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_2025.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">20:25</span><span class="fname">astock_20260417_2025.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="daily-reporter/reports/astock_20260417_1850.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-dr">简版</span><span class="time">18:50</span><span class="fname">astock_20260417_1850.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1828.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">18:28</span><span class="fname">astock_20260417_1828.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1820.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">18:20</span><span class="fname">astock_20260417_1820.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1818.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">18:18</span><span class="fname">astock_20260417_1818.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1817.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">18:17</span><span class="fname">astock_20260417_1817.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1815.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">18:15</span><span class="fname">astock_20260417_1815.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1757.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:57</span><span class="fname">astock_20260417_1757.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1755.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:55</span><span class="fname">astock_20260417_1755.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1750.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:50</span><span class="fname">astock_20260417_1750.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1748.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:48</span><span class="fname">astock_20260417_1748.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1746.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:46</span><span class="fname">astock_20260417_1746.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1744.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:44</span><span class="fname">astock_20260417_1744.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1727.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:27</span><span class="fname">astock_20260417_1727.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1725.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:25</span><span class="fname">astock_20260417_1725.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1709.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:09</span><span class="fname">astock_20260417_1709.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1706.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:06</span><span class="fname">astock_20260417_1706.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1705.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">17:05</span><span class="fname">astock_20260417_1705.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1646.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">16:46</span><span class="fname">astock_20260417_1646.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1634.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">16:34</span><span class="fname">astock_20260417_1634.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1558.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">15:58</span><span class="fname">astock_20260417_1558.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1553.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">15:53</span><span class="fname">astock_20260417_1553.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1552.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">15:52</span><span class="fname">astock_20260417_1552.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1545.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">15:45</span><span class="fname">astock_20260417_1545.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="A-Stock-Analysis/reports/astock_20260417_1543.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-asa">深度版</span><span class="time">15:43</span><span class="fname">astock_20260417_1543.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="daily-reporter/reports/astock_20260417_1200.html"><span class="badge badge-noon">午间</span><span class="badge badge-dr">简版</span><span class="time">12:00</span><span class="fname">astock_20260417_1200.html</span><span class="arrow">›</span></a>
+</div>
+<div class="date-group"><div class="date-header">2026年4月16日<span class="wd"> · 周四</span></div>
+  <a class="report-link" href="daily-reporter/reports/astock_20260416_1700.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-dr">简版</span><span class="time">17:00</span><span class="fname">astock_20260416_1700.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="daily-reporter/reports/astock_20260416_1200.html"><span class="badge badge-noon">午间</span><span class="badge badge-dr">简版</span><span class="time">12:00</span><span class="fname">astock_20260416_1200.html</span><span class="arrow">›</span></a>
+</div>
+<div class="date-group"><div class="date-header">2026年4月15日<span class="wd"> · 周三</span></div>
+  <a class="report-link" href="daily-reporter/reports/astock_20260415_1700.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-dr">简版</span><span class="time">17:00</span><span class="fname">astock_20260415_1700.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="daily-reporter/reports/astock_20260415_1200.html"><span class="badge badge-noon">午间</span><span class="badge badge-dr">简版</span><span class="time">12:00</span><span class="fname">astock_20260415_1200.html</span><span class="arrow">›</span></a>
+</div>
+<div class="date-group"><div class="date-header">2026年4月14日<span class="wd"> · 周二</span></div>
+  <a class="report-link" href="daily-reporter/reports/astock_20260414_1700.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-dr">简版</span><span class="time">17:00</span><span class="fname">astock_20260414_1700.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="daily-reporter/reports/astock_20260414_1200.html"><span class="badge badge-noon">午间</span><span class="badge badge-dr">简版</span><span class="time">12:00</span><span class="fname">astock_20260414_1200.html</span><span class="arrow">›</span></a>
+</div>
+<div class="date-group"><div class="date-header">2026年4月13日<span class="wd"> · 周一</span></div>
+  <a class="report-link" href="daily-reporter/reports/astock_20260413_2154.html"><span class="badge badge-daily">每日收盘</span><span class="badge badge-dr">简版</span><span class="time">21:54</span><span class="fname">astock_20260413_2154.html</span><span class="arrow">›</span></a>
+  <a class="report-link" href="daily-reporter/reports/astock_20260413_1206.html"><span class="badge badge-noon">午间</span><span class="badge badge-dr">简版</span><span class="time">12:06</span><span class="fname">astock_20260413_1206.html</span><span class="arrow">›</span></a>
 </div>
 
-<div class="header" style="margin-top:28px">
-  <h1 style="font-size:18px">📝 Markdown 报告</h1>
-</div>
-<div class="date-group"><div class="date-header">2026年4月19日<span class="wd"> · 周日</span></div>
+<div class='header' style='margin-top:28px'><h1 style='font-size:18px'>📝 Markdown 报告</h1></div><div class="date-group"><div class="date-header">2026年4月19日<span class="wd"> · 周日</span></div>
   <a class="report-link" href="A-Stock-Analysis/reports/stock_report_20260419_晚.md"><span class="badge badge-md">收盘</span><span class="time">00:00</span><span class="fname">stock_report_20260419_晚.md</span><span class="arrow">›</span></a>
 </div>
 
 <div class="footer">
-  由 <a href="https://github.com/berming/Huigu-AI">berming/Huigu-AI</a>
-  · A-Stock-Analysis 自动生成<br>
-  索引刷新于 2026-04-19 18:20 BJ · 仅供参考，不构成投资建议
+  由 <a href="https://github.com/berming/Huigu-AI">berming/Huigu-AI</a> 自动生成<br>
+  索引刷新于 2026-04-23 01:22 BJ · 仅供参考，不构成投资建议
 </div>
 </body>
 </html>
