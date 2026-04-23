@@ -65,9 +65,6 @@ WATCH_STOCKS = [
     ('sh.601360', '三六零',     '网络安全/AI'),
     ('sz.002179', '中航光电',   '军工连接器龙头'),
     ('sz.002230', '科大讯飞',   'AI语音龙头'),
-    ('sh.600410', '华胜天成',   '云计算/算力'),
-    ('sz.002475', '立讯精密',   '消费电子/连接器'),
-    ('sz.000977', '浪潮信息',   'AI服务器/算力'),
     ('sh.600438', '通威股份',   '光伏/硅料'),
 ]
 
@@ -764,7 +761,7 @@ def render_depth_analysis(s, w, cf, tech, news_latest=None):
 
     return ("<div class=\'depth-section\'>"
             "<div class=\'depth-toggle rotated\' onclick=\'this.nextElementSibling.classList.toggle(\"hidden\");this.classList.toggle(\"rotated\")\'>"
-            "<span class=\'depth-toggle-icon\'>▸</span>📊 深度分析"
+            "<span class=\'depth-toggle-icon\'>▸</span>📊 " + (s.get("name") or "") + " · 深度分析"
             "</div>"
             "<div class=\'depth-body\'>"
             "<div class=\'depth-cols\'>"
@@ -779,7 +776,7 @@ def render_capital_flow(cf):
         err = (cf or {}).get("error", "")
         return (
             '<div class="cf-wrap cf-empty">'
-            '<div class="cf-title">💰 主力资金追踪</div>'
+            '<div class="cf-title">💰 ' + (cf.get("name") or "") + ' · 主力资金追踪</div>'
             f'<div class="cf-note">数据暂不可用{("：" + err) if err else ""}</div>'
             '</div>'
         )
@@ -1246,15 +1243,15 @@ def render_deep_analysis(s, w, cf, tech):
     return (
         "<div class='depth-section'>"
         "<div class='depth-toggle rotated' onclick='" + toggle_onclick + "'>"
-        "<span class='depth-toggle-icon'>▸</span>📊 深度分析"
+        "<span class='depth-toggle-icon'>▸</span>📊 " + (s.get("name") or "") + " · 深度分析"
         "</div>"
         "<div class='depth-body'>"
         + mhtml
+        + vhtml
         + "<div class='depth-cols'>"
         "<div class='depth-col'><div class='depth-sub-title'>🧠 技术面</div><div class='tech-grid'>" + tech_rows + "</div></div>"
         "<div class='depth-col'><div class='depth-sub-title'>💰 资金面</div><div class='sentiment-items'>" + "".join(sp) + "</div></div>"
         + "</div>"
-        + vhtml
         + "</div></div>"
     )
 
@@ -1353,17 +1350,17 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
                   "<span>合计成交额：<strong>" + fmt_amt(total_amt) + "</strong></span>"
                   "</div></div>")
 
-    # Section 2: Main Indices Table
+    # Section 2: Main Indices Table（去代码列，数值取整无千分位）
     idx_rows_html = ""
     for idx in indices:
         a = "▲" if idx["pctChg"] > 0 else "▼" if idx["pctChg"] < 0 else "―"
         pct_cls = "up" if idx["pctChg"] > 0 else ("dn" if idx["pctChg"] < 0 else "nt")
-        idx_rows_html += ("<tr><td>" + idx["name"] + "</td><td>" + idx["code"] + "</td>"
-                         "<td>" + ("{:,.2f}".format(idx["close"])) + "</td>"
+        idx_rows_html += ("<tr><td>" + idx["name"] + "</td>"
+                         "<td>" + str(int(round(idx["close"]))) + "</td>"
                          "<td class='" + pct_cls + "'>" + a + " " + ("{:+.2f}".format(idx["pctChg"])) + "%</td>"
                          "<td>" + ("{:+.2f}".format(idx["change"])) + "</td>"
-                         "<td>" + ("{:,.2f}".format(idx["high"])) + "</td>"
-                         "<td>" + ("{:,.2f}".format(idx["low"])) + "</td>"
+                         "<td>" + str(int(round(idx["high"]))) + "</td>"
+                         "<td>" + str(int(round(idx["low"]))) + "</td>"
                          "<td>" + fmt_vol(idx["volume"]) + "</td>"
                          "<td>" + fmt_amt(idx["amount"]) + "</td></tr>")
 
@@ -1371,7 +1368,7 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
                     "<div class='rpt-sec'>一、主要指数</div>"
                     "<div class='rpt-tbl-wrap'>"
                     "<table class='rpt-tbl'>"
-                    "<thead><tr><th>指数</th><th>代码</th><th>收盘点位</th><th>涨跌幅</th><th>涨跌额</th><th>最高</th><th>最低</th><th>成交量</th><th>成交额</th></tr></thead>"
+                    "<thead><tr><th>指数</th><th>收盘</th><th>涨跌幅</th><th>涨跌额</th><th>最高</th><th>最低</th><th>成交量</th><th>成交额</th></tr></thead>"
                     "<tbody>" + idx_rows_html + "</tbody></table></div>"
                     "<div class='rpt-src'>数据来源：Baostock · 仅供参考，不构成投资建议</div></div>")
 
@@ -1386,14 +1383,14 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
                        "<div class='rpt-sec'>二、市场节奏（近5日涨跌）</div>"
                        "<div class='rpt-breadth'>" + "".join(br_items) + "</div></div>")
 
-    # Section 4: Watch Stocks Table
+    # Section 4: Watch Stocks Table（去代码列，收盘/MA取整）
     stock_rows_html = ""
     if valid:
         for s in valid:
             a = "▲" if s["pctChg"] > 0 else "▼" if s["pctChg"] < 0 else "―"
             pct_cls = "up" if s["pctChg"] > 0 else ("dn" if s["pctChg"] < 0 else "nt")
             stock_rows_html += ("<tr>"
-                               "<td>" + s["name"] + "</td><td>" + s["code"] + "</td><td>" + s["tag"] + "</td>"
+                               "<td>" + s["name"] + "</td><td>" + s["tag"] + "</td>"
                                "<td>" + ("%.2f" % s["close"]) + "</td>"
                                "<td class='" + pct_cls + "'>" + a + " " + ("{:+.2f}".format(s["pctChg"])) + "%</td>"
                                "<td>" + ("{:+.2f}".format(s["change"])) + "</td>"
@@ -1415,7 +1412,7 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
                     "<div class='rpt-sec'>三、自选个股</div>"
                     "<div class='rpt-tbl-wrap'>"
                     "<table class='rpt-tbl'>"
-                    "<thead><tr><th>股票</th><th>代码</th><th>业务</th><th>收盘价</th><th>涨跌幅</th><th>涨跌额</th><th>MA5</th><th>MA10</th><th>距高点</th><th>距低点</th></tr></thead>"
+                    "<thead><tr><th>股票</th><th>业务</th><th>收盘价</th><th>涨跌幅</th><th>涨跌额</th><th>MA5</th><th>MA10</th><th>距高点</th><th>距低点</th></tr></thead>"
                     "<tbody>" + stock_rows_html + "</tbody></table></div>"
                     "<div class='rpt-note'>" + stock_note + "</div></div>")
 
@@ -1437,20 +1434,6 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
                        "<div class='rpt-sec'>五、综合评述</div>"
                        "<div class='rpt-summary'>" + summary + "</div>"
                        "<div class='rpt-src'>🤖 本报告由 Huigu-AI 自动生成 · 数据来源 Baostock · 仅供参考，不构成投资建议</div></div>")
-
-    report_html += "<div class='rpt-card rpt-chart-sec'><div class='rpt-sec'>六、个股行情（实时数据）</div></div>"
-
-    idx_cells = ""
-    for key, label in idx_map:
-        d = sina_indices.get(key, {})
-        price = d.get("price", "—")
-        chg_pct = d.get("chg_pct", "")
-        idx_cells += f"""
-      <div class="idx">
-        <div class="n">{label}</div>
-        <div class="v">{price}</div>
-        <div class="c">{fmt_pct(chg_pct) if chg_pct else '<span class="nt">—</span>'}</div>
-      </div>"""
 
     stock_cards = ""
     # Build watch lookup by code for depth analysis
@@ -1505,11 +1488,11 @@ def generate_html(t_day, sina_indices, stock_data, news, session, gen_dt, indice
       </div>
       <div class="charts-row">
         <div class="chart-cell">
-          <div class="chart-label">📈 分时图（{t_day.month}/{t_day.day} 快照）<span>来源：新浪财经 · 已离线存档</span></div>
+          <div class="chart-label">📈 {s["name"]} · 分时图（{t_day.month}/{t_day.day}）<span>新浪财经</span></div>
           <img src="{min_b64}" alt="{s["name"]}分时图" class="chart-img">
         </div>
         <div class="chart-cell">
-          <div class="chart-label">🕯 日K线（近期快照）<span>来源：新浪财经 · 已离线存档</span></div>
+          <div class="chart-label">🕯 {s["name"]} · 日K线（近期）<span>新浪财经</span></div>
           <img src="{daily_b64}" alt="{s["name"]}日K线" class="chart-img">
         </div>
       </div>
@@ -1627,17 +1610,17 @@ body{{font-family:'PingFang SC','Noto Sans SC',-apple-system,sans-serif;backgrou
 .cf-svg{{width:100%;height:auto;display:block;border:1px solid #e2e8f0;border-radius:6px;background:#fafbfc}}
 
 /* ── 深度分析 ─────────────────────────────── */
-.depth-section{{border-top:1px solid #f1f5f9;padding:12px 18px;background:#fafdff}}
-.depth-toggle{{font-size:12px;font-weight:600;color:#3b82f6;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;padding:4px 0}}
-.depth-toggle-icon{{font-size:10px;transition:transform .2s;display:inline-block}}
+.depth-section{{border-top:1px solid #e2e8f0;padding:14px 18px;background:#fafdff}}
+.depth-toggle{{font-size:13px;font-weight:700;color:#3b82f6;cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;padding:6px 0}}
+.depth-toggle-icon{{font-size:11px;transition:transform .2s;display:inline-block}}
 .depth-toggle.rotated .depth-toggle-icon{{transform:rotate(90deg)}}
 .depth-body.hidden{{display:none}}
-.depth-cols{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}}
+.depth-cols{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}}
 .depth-col{{min-width:0}}
-.depth-sub-title{{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin-bottom:6px}}
-.da-row{{display:flex;gap:6px;margin-bottom:4px;flex-wrap:wrap}}
+.depth-sub-title{{font-size:11px;font-weight:700;color:#475569;letter-spacing:1px;margin-bottom:8px}}
+.da-row{{display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap}}
 .da-cell{{flex:1;min-width:0}}
-.da-tag{{display:inline-block;font-size:10px;padding:3px 7px;border-radius:4px;background:#f1f5f9;color:#475569;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}}
+.da-tag{{display:inline-block;font-size:12px;padding:4px 10px;border-radius:6px;background:#f1f5f9;color:#475569;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}}
 .da-tag.up{{background:#fef2f2;color:#dc2626}}.da-tag.dn{{background:#f0fdf4;color:#16a34a}}
 .da-tag.ovb{{background:#fef2f2;color:#b91c1c}}.da-tag.ovs{{background:#f0fdf4;color:#15803d}}
 .da-tag.str{{background:#eff6ff;color:#1d4ed8}}.da-tag.wkr{{background:#fff7ed;color:#c2410c}}
@@ -1646,9 +1629,10 @@ body{{font-family:'PingFang SC','Noto Sans SC',-apple-system,sans-serif;backgrou
 .ev-list{{list-style:none;padding:0;margin:0}}
 .ev-list li{{font-size:11px;color:#475569;line-height:1.6;padding:3px 0;border-bottom:1px solid #f1f5f9}}
 .ev-list li:last-child{{border-bottom:none}}
-.da-verdict{{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9}}
-.verdict-label{{font-size:11px;font-weight:600;color:#475569}}
-.verdict-score{{font-weight:700;font-size:12px}}
+.da-verdict{{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 12px;
+            background:#fff;border:1px solid #e2e8f0;border-radius:8px}}
+.verdict-label{{font-size:12px;font-weight:700;color:#475569}}
+.verdict-score{{font-weight:700;font-size:14px}}
 
 /* ── 技术图表 ─────────────────────────────── */
 .tc-row{{display:flex;flex-direction:column;gap:8px;margin:10px 0 0}}
@@ -1696,9 +1680,7 @@ body{{font-family:'PingFang SC','Noto Sans SC',-apple-system,sans-serif;backgrou
   <span class="bdg">📁 {file_badge}</span>
 </div>
 {report_html}
-<div class="sec">主要指数（实时行情）</div>
-<div class="idx-row">{idx_cells}</div>
-<div class="sec">个股行情 · 分时图 + 日K线快照（离线存档）</div>
+<div class="sec">六、个股行情 · 分时图 + 日K线快照</div>
 {stock_cards}
 <div class="sec">当日要闻摘要</div>
 <div class="news"><ul>{news_items}</ul></div>
@@ -1955,9 +1937,6 @@ def main(session=None):
         {"name": "三六零",   "code": "601360", "market": "sh", "tag": "AI应用/安全"},
         {"name": "中航光电", "code": "002179", "market": "sz", "tag": "连接器/液冷"},
         {"name": "科大讯飞", "code": "002230", "market": "sz", "tag": "AI大模型"},
-        {"name": "华胜天成", "code": "600410", "market": "sh", "tag": "云计算/算力"},
-        {"name": "立讯精密", "code": "002475", "market": "sz", "tag": "消费电子/连接器"},
-        {"name": "浪潮信息", "code": "000977", "market": "sz", "tag": "AI服务器/算力"},
         {"name": "通威股份", "code": "600438", "market": "sh", "tag": "光伏/硅料"},
     ]
     stock_data = []
